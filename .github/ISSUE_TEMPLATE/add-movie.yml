@@ -1,0 +1,25 @@
+name: Add Movie Request
+description: Request trailers for a movie not in the database
+title: "[Movie Request] "
+labels: ["movie-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping grow TrailerDB! Paste the IMDb URL for the movie you'd like us to add.
+  - type: input
+    id: imdb_url
+    attributes:
+      label: IMDb URL
+      description: The full IMDb URL of the movie (e.g. https://www.imdb.com/title/tt1234567/)
+      placeholder: "https://www.imdb.com/title/tt1234567/"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: Any extra context (optional)
+      placeholder: "e.g. This movie was just announced and might not be on TMDB yet."
+    validations:
+      required: false

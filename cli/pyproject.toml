@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "trailerdb"
+version = "0.1.0"
+description = "CLI tool for browsing and downloading movie trailers from TrailerDB"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.25",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+download = ["yt-dlp>=2023.0"]
+dev = ["pytest", "pytest-asyncio"]
+
+[project.scripts]
+trailerdb = "trailerdb_cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trailerdb_cli"]

@@ -1,0 +1,34 @@
+# TrailerDB — The Trailer Database
+
+> TrailerDB is the largest open-source database of movie trailers on the web.
+
+## Overview
+
+TrailerDB catalogs every trailer for every movie, in every language. The database contains:
+
+- 100,000+ movies with trailers
+- 220,000+ YouTube trailer embeds
+- Trailers in 30+ languages
+- 9 trailer types: theatrical, teaser, TV spot, red band, IMAX, clip, featurette, behind the scenes, bloopers
+
+## How to use this site
+
+- Search for any movie by name to find all its trailers
+- Browse movies by genre, year, or decade
+- Filter trailers by type and language on each movie page
+- All trailers are embedded YouTube videos
+
+## Data
+
+Movie metadata is sourced from TMDB (The Movie Database). Trailer video data comes from TMDB's video API, linking movies to their YouTube trailers. The database is updated regularly.
+
+## API
+
+Movie data is available as static JSON files:
+- Movie detail: /data/movie/{imdb_id}.json
+- Browse index: /data/index.json
+- Site stats: /data/stats.json
+
+## Open Source
+
+TrailerDB is open source. The full database, collection pipeline, and website code are available on GitHub.

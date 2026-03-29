@@ -1,0 +1,5 @@
+aiohttp>=3.9,<4
+aiosqlite>=0.20,<1
+python-dotenv>=1.0,<2
+tqdm>=4.66,<5
+yt-dlp>=2024.1,<2026

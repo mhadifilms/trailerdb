@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.env
+db/*.db
+db/*.db-journal
+db/*.db-shm
+db/*.db-wal
+*.gz
+.DS_Store
+.venv/
+
+# Distribution exports
+dist/
+
+# Site
+site/node_modules/
+site/dist/
+site/public/data/
+site/public/sitemap-*.xml

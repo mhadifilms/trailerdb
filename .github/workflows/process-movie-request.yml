@@ -1,0 +1,141 @@
+name: Process Movie Request
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process:
+    if: contains(github.event.issue.labels.*.name, 'movie-request')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract IMDb ID from issue body
+        id: extract
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const match = body.match(/imdb\.com\/title\/(tt\d+)/);
+            if (!match) {
+              core.setFailed('No valid IMDb URL found in the issue body.');
+              return;
+            }
+            const imdbId = match[1];
+            core.setOutput('imdb_id', imdbId);
+            core.info(`Extracted IMDb ID: ${imdbId}`);
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run single-movie pipeline
+        id: pipeline
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: |
+          python -m pipeline.add_single_movie ${{ steps.extract.outputs.imdb_id }} 2>&1 | tee pipeline_output.txt
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Check for results
+        id: results
+        run: |
+          IMDB_ID="${{ steps.extract.outputs.imdb_id }}"
+          JSON_FILE="site/public/data/movie/${IMDB_ID}.json"
+          if [ -f "$JSON_FILE" ]; then
+            TRAILER_COUNT=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(len(d.get('trailers', [])))")
+            TITLE=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(d.get('title', 'Unknown'))")
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "trailer_count=$TRAILER_COUNT" >> "$GITHUB_OUTPUT"
+            echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit new movie data
+        if: steps.results.outputs.found == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          IMDB_ID="${{ steps.extract.outputs.imdb_id }}"
+          git add "site/public/data/movie/${IMDB_ID}.json"
+          git commit -m "Add movie data for ${{ steps.results.outputs.title }} (${IMDB_ID})" || echo "Nothing to commit"
+          git push
+
+      - name: Comment with results
+        if: steps.results.outputs.found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '${{ steps.results.outputs.title }}';
+            const count = '${{ steps.results.outputs.trailer_count }}';
+            const imdbId = '${{ steps.extract.outputs.imdb_id }}';
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Trailers found for **${title}**`,
+                '',
+                `We found **${count} trailer(s)** on TMDB for this movie.`,
+                '',
+                `The movie data has been added and will be available on the site after the next deploy.`,
+                '',
+                `- IMDb: https://www.imdb.com/title/${imdbId}/`,
+              ].join('\n'),
+            });
+
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed',
+            });
+
+      - name: Comment if no trailers found
+        if: steps.results.outputs.found == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const imdbId = '${{ steps.extract.outputs.imdb_id }}';
+            const output = require('fs').readFileSync('pipeline_output.txt', 'utf8');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## No trailers found`,
+                '',
+                `We couldn't find any trailers on TMDB for \`${imdbId}\`.`,
+                '',
+                'Possible reasons:',
+                '- The movie may not exist on TMDB yet',
+                '- TMDB may not have any YouTube trailers for this movie',
+                '- The IMDb ID may be incorrect',
+                '',
+                'We\'ll leave this issue open in case trailers are added to TMDB later.',
+                '',
+                '<details><summary>Pipeline output</summary>',
+                '',
+                '```',
+                output.slice(-2000),
+                '```',
+                '</details>',
+              ].join('\n'),
+            });
