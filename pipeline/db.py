@@ -206,7 +206,8 @@ MIGRATIONS = [
 def init_db_sync():
     """Create database and schema synchronously (for bootstrap)."""
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("PRAGMA busy_timeout = 30000")
     conn.executescript(SCHEMA)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
