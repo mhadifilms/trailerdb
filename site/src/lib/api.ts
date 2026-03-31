@@ -1,5 +1,5 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
-import type { MovieDetail, GenreMeta, SiteStats, BrowseIndex, SeriesDetail, SeriesBrowseIndex } from './types'
+import type { MovieDetail, GenreMeta, SiteStats, BrowseIndex, SeriesDetail, SeriesBrowseIndex, AnalyticsData } from './types'
 import { parseIndex, parseShard, parseSeriesIndex, parseSeriesShard } from './utils'
 
 const BASE = import.meta.env.BASE_URL + 'data'
@@ -101,5 +101,13 @@ export function prefetchSeries(tmdbId: number, queryClient: QueryClient) {
   queryClient.prefetchQuery({
     queryKey: ['series', String(tmdbId)],
     queryFn: () => fetchJson<SeriesDetail>(`series/${tmdbId}.json`),
+  })
+}
+
+/** Fetch analytics data */
+export function useAnalytics() {
+  return useQuery({
+    queryKey: ['analytics'],
+    queryFn: () => fetchJson<AnalyticsData>('analytics.json'),
   })
 }

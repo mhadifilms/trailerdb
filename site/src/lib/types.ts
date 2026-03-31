@@ -140,6 +140,96 @@ export interface SeriesTrailer {
   quality: number | null
 }
 
+export interface AnalyticsData {
+  overview: {
+    movies: number
+    series: number
+    trailers: number
+    series_trailers: number
+    total_views: number
+    total_likes: number
+    unique_channels: number
+    avg_duration: number
+    avg_views_per_trailer: number
+    engagement_rate: number
+  }
+  by_type: {
+    type: string
+    count: number
+    avg_views: number
+    max_views: number
+    avg_duration: number
+    total_views: number
+    total_likes: number
+    avg_likes: number
+    likes_per_1k_views: number
+    views_per_second: number
+  }[]
+  by_language: {
+    lang: string
+    count: number
+    total_views: number
+    avg_views: number
+    total_likes: number
+    avg_likes: number
+  }[]
+  by_year: {
+    year: number
+    movies: number
+    trailers: number
+    total_views: number
+    avg_views: number
+  }[]
+  top_channels_by_views: {
+    name: string
+    trailers: number
+    views: number
+    avg_per_trailer: number
+  }[]
+  top_channels_by_count: {
+    name: string
+    trailers: number
+    views: number
+    avg_per_trailer: number
+  }[]
+  most_viewed: {
+    youtube_id: string
+    title: string
+    views: number
+    likes: number
+    type: string
+    duration: number
+    channel: string
+    movie: string
+    imdb_id: string
+    year: number
+  }[]
+  overperformers: {
+    youtube_id: string
+    movie: string
+    imdb_id: string
+    views: number
+    type: string
+    type_avg: number
+    multiplier: number
+  }[]
+  multilingual_stats: {
+    movies_with_multiple_langs: number
+    avg_langs: number
+    top_lang_pairs: [string, string, number][]
+  }
+  duration_heatmap: {
+    type: string
+    bucket: string
+    avg_views: number
+    count: number
+  }[]
+  type_by_genre: {
+    genre: string
+    [key: string]: number | string
+  }[]
+}
+
 export interface SeriesBrowseIndex {
   series: (string | number | number[] | null)[][]
   fields: string[]

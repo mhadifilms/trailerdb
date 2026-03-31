@@ -740,6 +740,297 @@ def export_series_browse_shards(series_list: list):
     print(f"  → {browse_dir}/ (series shards created)")
 
 
+def export_analytics(conn: sqlite3.Connection):
+    """Export pre-computed analytics data for the dashboard."""
+    print("Exporting analytics...")
+    analytics = {}
+
+    # 1. Overview
+    cur = conn.execute("SELECT COUNT(DISTINCT movie_id) FROM trailers WHERE is_available=1")
+    movies_count = cur.fetchone()[0]
+    cur = conn.execute("SELECT COUNT(DISTINCT series_id) FROM series_trailers WHERE is_available=1")
+    series_count = cur.fetchone()[0]
+    cur = conn.execute("SELECT COUNT(*) FROM trailers WHERE is_available=1")
+    trailers_count = cur.fetchone()[0]
+    cur = conn.execute("SELECT COUNT(*) FROM series_trailers WHERE is_available=1")
+    series_trailers_count = cur.fetchone()[0]
+    cur = conn.execute("SELECT COALESCE(SUM(view_count), 0) FROM trailers WHERE is_available=1 AND view_count IS NOT NULL")
+    total_views = cur.fetchone()[0]
+    cur = conn.execute("SELECT COALESCE(SUM(like_count), 0) FROM trailers WHERE is_available=1 AND like_count IS NOT NULL")
+    total_likes = cur.fetchone()[0]
+    cur = conn.execute("SELECT COUNT(DISTINCT channel_name) FROM trailers WHERE channel_name IS NOT NULL AND is_available=1")
+    unique_channels = cur.fetchone()[0]
+    cur = conn.execute("SELECT CAST(COALESCE(AVG(duration_seconds), 0) AS INT) FROM trailers WHERE duration_seconds IS NOT NULL AND is_available=1")
+    avg_duration = cur.fetchone()[0]
+    cur = conn.execute("SELECT CAST(COALESCE(AVG(view_count), 0) AS INT) FROM trailers WHERE view_count IS NOT NULL AND is_available=1")
+    avg_views_per_trailer = cur.fetchone()[0]
+    engagement_rate = round(total_likes / total_views * 100, 2) if total_views > 0 else 0
+
+    analytics["overview"] = {
+        "movies": movies_count,
+        "series": series_count,
+        "trailers": trailers_count,
+        "series_trailers": series_trailers_count,
+        "total_views": total_views,
+        "total_likes": total_likes,
+        "unique_channels": unique_channels,
+        "avg_duration": avg_duration,
+        "avg_views_per_trailer": avg_views_per_trailer,
+        "engagement_rate": engagement_rate,
+    }
+
+    # 2. by_type — array of objects sorted by avg_views DESC
+    cur = conn.execute("""
+        SELECT trailer_type,
+               COUNT(*) AS cnt,
+               CAST(COALESCE(AVG(view_count), 0) AS INT) AS avg_views,
+               COALESCE(MAX(view_count), 0) AS max_views,
+               CAST(COALESCE(AVG(duration_seconds), 0) AS INT) AS avg_duration,
+               COALESCE(SUM(view_count), 0) AS total_views,
+               COALESCE(SUM(like_count), 0) AS total_likes,
+               CAST(COALESCE(AVG(like_count), 0) AS INT) AS avg_likes
+        FROM trailers
+        WHERE is_available=1 AND view_count IS NOT NULL
+        GROUP BY trailer_type
+        ORDER BY avg_views DESC
+    """)
+    by_type = []
+    for r in cur.fetchall():
+        ttype, cnt, avg_v, max_v, avg_dur, tot_v, tot_l, avg_l = r
+        likes_per_1k = round(tot_l / tot_v * 1000, 2) if tot_v > 0 else 0
+        views_per_sec = round(tot_v / (avg_dur * cnt), 2) if avg_dur > 0 and cnt > 0 else 0
+        by_type.append({
+            "type": ttype, "count": cnt, "avg_views": avg_v, "max_views": max_v,
+            "avg_duration": avg_dur, "total_views": tot_v, "total_likes": tot_l,
+            "avg_likes": avg_l, "likes_per_1k_views": likes_per_1k,
+            "views_per_second": views_per_sec,
+        })
+    analytics["by_type"] = by_type
+
+    # 3. by_language — array sorted by avg_views DESC
+    cur = conn.execute("""
+        SELECT language,
+               COUNT(*) AS cnt,
+               COALESCE(SUM(view_count), 0) AS total_views,
+               CAST(COALESCE(AVG(view_count), 0) AS INT) AS avg_views,
+               COALESCE(SUM(like_count), 0) AS total_likes,
+               CAST(COALESCE(AVG(like_count), 0) AS INT) AS avg_likes
+        FROM trailers
+        WHERE language IS NOT NULL AND view_count IS NOT NULL AND is_available=1
+        GROUP BY language
+        ORDER BY AVG(view_count) DESC
+    """)
+    analytics["by_language"] = [
+        {"lang": r[0], "count": r[1], "total_views": r[2], "avg_views": r[3],
+         "total_likes": r[4], "avg_likes": r[5]}
+        for r in cur.fetchall()
+    ]
+
+    # 4. by_year — array for years 2000-2026
+    cur = conn.execute("""
+        SELECT m.year,
+               COUNT(DISTINCT m.id) AS movies,
+               COUNT(t.id) AS trailers,
+               COALESCE(SUM(t.view_count), 0) AS total_views,
+               CAST(COALESCE(AVG(t.view_count), 0) AS INT) AS avg_views
+        FROM trailers t
+        JOIN movies m ON m.id = t.movie_id
+        WHERE m.year >= 2000 AND m.year <= 2026 AND t.is_available=1
+        GROUP BY m.year
+        ORDER BY m.year
+    """)
+    analytics["by_year"] = [
+        {"year": r[0], "movies": r[1], "trailers": r[2], "total_views": r[3], "avg_views": r[4]}
+        for r in cur.fetchall()
+    ]
+
+    # 5. top_channels_by_views — top 30
+    cur = conn.execute("""
+        SELECT channel_name,
+               COUNT(*) AS trailers,
+               COALESCE(SUM(view_count), 0) AS views,
+               CAST(COALESCE(AVG(view_count), 0) AS INT) AS avg_per_trailer
+        FROM trailers
+        WHERE channel_name IS NOT NULL AND is_available=1 AND view_count IS NOT NULL
+        GROUP BY channel_name
+        ORDER BY SUM(view_count) DESC
+        LIMIT 30
+    """)
+    analytics["top_channels_by_views"] = [
+        {"name": r[0], "trailers": r[1], "views": r[2], "avg_per_trailer": r[3]}
+        for r in cur.fetchall()
+    ]
+
+    # 6. top_channels_by_count — top 30
+    cur = conn.execute("""
+        SELECT channel_name,
+               COUNT(*) AS trailers,
+               COALESCE(SUM(view_count), 0) AS views,
+               CAST(COALESCE(AVG(view_count), 0) AS INT) AS avg_per_trailer
+        FROM trailers
+        WHERE channel_name IS NOT NULL AND is_available=1
+        GROUP BY channel_name
+        ORDER BY COUNT(*) DESC
+        LIMIT 30
+    """)
+    analytics["top_channels_by_count"] = [
+        {"name": r[0], "trailers": r[1], "views": r[2], "avg_per_trailer": r[3]}
+        for r in cur.fetchall()
+    ]
+
+    # 7. most_viewed — top 50 trailers
+    cur = conn.execute("""
+        SELECT t.youtube_id, t.title, t.view_count, COALESCE(t.like_count, 0),
+               t.trailer_type, COALESCE(t.duration_seconds, 0), COALESCE(t.channel_name, ''),
+               m.title, m.imdb_id, m.year
+        FROM trailers t
+        JOIN movies m ON m.id = t.movie_id
+        WHERE t.view_count IS NOT NULL AND t.is_available=1
+        ORDER BY t.view_count DESC
+        LIMIT 50
+    """)
+    analytics["most_viewed"] = [
+        {"youtube_id": r[0], "title": r[1], "views": r[2], "likes": r[3],
+         "type": r[4], "duration": r[5], "channel": r[6],
+         "movie": r[7], "imdb_id": r[8], "year": r[9]}
+        for r in cur.fetchall()
+    ]
+
+    # 8. overperformers — trailers that beat their type avg by 10x+
+    # First compute avg per type
+    cur = conn.execute("""
+        SELECT trailer_type, AVG(view_count)
+        FROM trailers
+        WHERE is_available=1 AND view_count IS NOT NULL
+        GROUP BY trailer_type
+    """)
+    type_avgs = {r[0]: r[1] for r in cur.fetchall()}
+
+    # Build a CASE expression for type averages
+    if type_avgs:
+        case_parts = " ".join(
+            f"WHEN '{ttype}' THEN {avg}" for ttype, avg in type_avgs.items()
+        )
+        case_expr = f"CASE t.trailer_type {case_parts} ELSE 0 END"
+
+        cur = conn.execute(f"""
+            SELECT t.youtube_id, m.title, m.imdb_id, t.view_count, t.trailer_type,
+                   CAST({case_expr} AS INT) AS type_avg,
+                   CAST(t.view_count * 1.0 / (CASE {case_expr} WHEN 0 THEN 1 ELSE {case_expr} END) AS INT) AS multiplier
+            FROM trailers t
+            JOIN movies m ON m.id = t.movie_id
+            WHERE t.is_available=1 AND t.view_count IS NOT NULL
+              AND t.view_count > 10 * ({case_expr})
+              AND ({case_expr}) > 0
+            ORDER BY multiplier DESC
+            LIMIT 20
+        """)
+        analytics["overperformers"] = [
+            {"youtube_id": r[0], "movie": r[1], "imdb_id": r[2], "views": r[3],
+             "type": r[4], "type_avg": r[5], "multiplier": r[6]}
+            for r in cur.fetchall()
+        ]
+    else:
+        analytics["overperformers"] = []
+
+    # 9. multilingual_stats
+    cur = conn.execute("""
+        SELECT COUNT(*) FROM (
+            SELECT movie_id FROM trailers
+            WHERE is_available=1 AND language IS NOT NULL
+            GROUP BY movie_id
+            HAVING COUNT(DISTINCT language) > 1
+        )
+    """)
+    movies_with_multiple_langs = cur.fetchone()[0]
+
+    cur = conn.execute("""
+        SELECT CAST(COALESCE(AVG(lang_count), 0) AS INT) FROM (
+            SELECT COUNT(DISTINCT language) AS lang_count
+            FROM trailers
+            WHERE is_available=1 AND language IS NOT NULL
+            GROUP BY movie_id
+            HAVING COUNT(DISTINCT language) > 1
+        )
+    """)
+    avg_langs = cur.fetchone()[0]
+
+    # Top language pairs: find movies with exactly the pair, count occurrences
+    cur = conn.execute("""
+        SELECT l1.language || '-' || l2.language AS pair, COUNT(*) AS cnt
+        FROM (
+            SELECT DISTINCT movie_id, language FROM trailers
+            WHERE is_available=1 AND language IS NOT NULL
+        ) l1
+        JOIN (
+            SELECT DISTINCT movie_id, language FROM trailers
+            WHERE is_available=1 AND language IS NOT NULL
+        ) l2 ON l1.movie_id = l2.movie_id AND l1.language < l2.language
+        GROUP BY pair
+        ORDER BY cnt DESC
+        LIMIT 10
+    """)
+    top_lang_pairs = [{"pair": r[0], "count": r[1]} for r in cur.fetchall()]
+
+    analytics["multilingual_stats"] = {
+        "movies_with_multiple_langs": movies_with_multiple_langs,
+        "avg_langs": avg_langs,
+        "top_lang_pairs": top_lang_pairs,
+    }
+
+    # 10. duration_heatmap — type x duration_bucket -> avg_views
+    cur = conn.execute("""
+        SELECT trailer_type,
+               CASE
+                   WHEN duration_seconds <= 30 THEN '0-30s'
+                   WHEN duration_seconds <= 60 THEN '30-60s'
+                   WHEN duration_seconds <= 120 THEN '60-120s'
+                   WHEN duration_seconds <= 180 THEN '120-180s'
+                   WHEN duration_seconds <= 300 THEN '180-300s'
+                   ELSE '300+s'
+               END AS bucket,
+               CAST(COALESCE(AVG(view_count), 0) AS INT) AS avg_views,
+               COUNT(*) AS cnt
+        FROM trailers
+        WHERE is_available=1 AND duration_seconds IS NOT NULL AND view_count IS NOT NULL
+        GROUP BY trailer_type, bucket
+        ORDER BY trailer_type, bucket
+    """)
+    analytics["duration_heatmap"] = [
+        {"type": r[0], "bucket": r[1], "avg_views": r[2], "count": r[3]}
+        for r in cur.fetchall()
+    ]
+
+    # 11. type_by_genre — for top 10 genres by trailer count
+    cur = conn.execute("""
+        SELECT g.name, t.trailer_type, COUNT(*) AS cnt
+        FROM trailers t
+        JOIN movies m ON m.id = t.movie_id
+        JOIN movie_genres mg ON mg.movie_id = m.id
+        JOIN genres g ON g.id = mg.genre_id
+        WHERE t.is_available=1
+        GROUP BY g.name, t.trailer_type
+        ORDER BY g.name, cnt DESC
+    """)
+    genre_type_rows = cur.fetchall()
+
+    # Determine top 10 genres by total trailer count
+    genre_totals: dict[str, int] = {}
+    genre_types: dict[str, dict[str, int]] = {}
+    for genre, ttype, cnt in genre_type_rows:
+        genre_totals[genre] = genre_totals.get(genre, 0) + cnt
+        genre_types.setdefault(genre, {})[ttype] = cnt
+
+    top_genres = sorted(genre_totals, key=lambda g: genre_totals[g], reverse=True)[:10]
+    analytics["type_by_genre"] = [
+        {"genre": g, **genre_types[g]} for g in top_genres
+    ]
+
+    output = OUTPUT_DIR / "analytics.json"
+    output.write_text(json.dumps(analytics, separators=(",", ":")))
+    print(f"  → {output}")
+
+
 def export_sitemaps(movies: list, domain: str = "trailerdb.com"):
     """Generate sitemap index and chunked sitemaps."""
     print("Generating sitemaps...")
@@ -811,6 +1102,7 @@ def main():
     export_stats(conn)
     export_channels(conn)
     export_timeline_stats(conn)
+    export_analytics(conn)
     export_sitemaps(movies)
 
     # Export series
