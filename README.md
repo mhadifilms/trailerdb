@@ -1,4 +1,4 @@
-# TrailerDB
+# The Trailer Database
 
 The Trailer Database — an open-source database of every trailer for every movie, in every language.
 
