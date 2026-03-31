@@ -14,6 +14,7 @@ export function TrailerPlayer({ youtubeId, title, movieId, onShare }: TrailerPla
   const { activeId, setActive } = usePlayer()
   const isActive = activeId === youtubeId
   const [imgError, setImgError] = useState(false)
+  const [thumbFailed, setThumbFailed] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const handlePlay = useCallback(() => {
@@ -75,6 +76,17 @@ export function TrailerPlayer({ youtubeId, title, movieId, onShare }: TrailerPla
     ? youtubeThumbnail(youtubeId, 'mq')
     : youtubeThumbnail(youtubeId, 'hq')
 
+  if (thumbFailed) {
+    return (
+      <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-bg-surface flex flex-col items-center justify-center text-text-muted">
+        <svg className="w-8 h-8 mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+        <p className="text-xs font-body opacity-60">Video unavailable</p>
+      </div>
+    )
+  }
+
   return (
     <div className="relative">
       <button
@@ -87,7 +99,10 @@ export function TrailerPlayer({ youtubeId, title, movieId, onShare }: TrailerPla
           alt=""
           loading="lazy"
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-          onError={() => !imgError && setImgError(true)}
+          onError={() => {
+            if (!imgError) setImgError(true)
+            else setThumbFailed(true)
+          }}
         />
         {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
