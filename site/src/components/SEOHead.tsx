@@ -12,7 +12,7 @@ interface SEOProps {
 
 export function SEOHead({ title, description, image, url, type = 'website', jsonLd }: SEOProps) {
   const fullTitle = title ? `${title} | The Trailer Database` : 'The Trailer Database'
-  const desc = description || 'Every trailer, every movie, every language. Browse 100,000+ movies and 220,000+ trailers.'
+  const desc = description || 'Every trailer, every movie, every language. Browse 130,000+ movies & series and 330,000+ trailers in 30 languages.'
 
   return (
     <Helmet>

@@ -70,7 +70,7 @@ export function Browse() {
 
   return (
     <>
-      <SEOHead title="Browse Movies" description="Browse 100,000+ movies with trailers. Filter by genre, decade, and sort by rating, popularity, or trailer count." />
+      <SEOHead title="Browse Movies" description="Browse 105,000+ movies with 290,000+ trailers in 30 languages. Filter by genre, decade, and sort by rating, popularity, or trailer count." />
 
       <div className="max-w-7xl mx-auto px-4 pt-24 pb-12">
         <h1 className="font-display text-text-primary text-3xl md:text-4xl mb-6">Browse</h1>

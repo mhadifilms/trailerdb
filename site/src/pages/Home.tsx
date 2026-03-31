@@ -440,9 +440,9 @@ function HeroSection({ trendingMovies }: { trendingMovies: MovieIndex[] }) {
           transition={{ duration: 0.8, delay: 0.25 }}
           className="mt-4 sm:mt-5 text-base sm:text-xl text-black font-body tracking-[-0.02em] leading-relaxed px-2"
         >
-          A collection of 300,000+ <em className="font-medium">trailers</em>,{' '}
+          A collection of 330,000+ <em className="font-medium">trailers</em>,{' '}
           <em className="font-medium">clips</em>, and{' '}
-          <em className="font-medium">behind-the-scenes</em> from films & TV shows, in over 20+ languages
+          <em className="font-medium">behind-the-scenes</em> from 130,000+ films & TV shows, in 30 languages
         </motion.p>
 
         {/* In-place search bar that expands with results */}

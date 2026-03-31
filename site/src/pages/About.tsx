@@ -13,7 +13,7 @@ export function About() {
         name: 'How many movies does The Trailer Database have?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: `The Trailer Database contains trailers for over ${stats ? stats.movies_with_trailers.toLocaleString() : '100,000'} movies.`,
+          text: `The Trailer Database contains trailers for over ${stats ? stats.movies_with_trailers.toLocaleString() : '105,000'} movies and 24,000+ TV series.`,
         },
       },
       {
@@ -39,7 +39,7 @@ export function About() {
     <>
       <SEOHead
         title="About"
-        description="The Trailer Database is the largest open-source database of movie trailers. Browse trailers for 100,000+ movies in 30+ languages."
+        description="The Trailer Database is the largest open-source trailer database. 330,000+ trailers for 130,000+ movies & series in 30 languages."
         jsonLd={faqJsonLd}
       />
 
