@@ -411,6 +411,54 @@ def export_stats(conn: sqlite3.Connection):
     )
     stats["by_language"] = {row[0]: row[1] for row in cursor.fetchall()}
 
+    # Series stats
+    try:
+        cursor = conn.execute("SELECT COUNT(DISTINCT series_id) FROM series_trailers WHERE is_available = 1")
+        stats["series_with_trailers"] = cursor.fetchone()[0]
+        cursor = conn.execute("SELECT COUNT(*) FROM series_trailers WHERE is_available = 1")
+        stats["total_series_trailers"] = cursor.fetchone()[0]
+    except Exception:
+        stats["series_with_trailers"] = 0
+        stats["total_series_trailers"] = 0
+
+    # YouTube engagement stats (from Phase 3 enrichment)
+    cursor = conn.execute("SELECT COALESCE(SUM(view_count), 0) FROM trailers WHERE view_count IS NOT NULL")
+    stats["total_views"] = cursor.fetchone()[0]
+    cursor = conn.execute("SELECT COALESCE(SUM(like_count), 0) FROM trailers WHERE like_count IS NOT NULL")
+    stats["total_likes"] = cursor.fetchone()[0]
+    cursor = conn.execute("SELECT CAST(AVG(duration_seconds) AS INT) FROM trailers WHERE duration_seconds IS NOT NULL")
+    stats["avg_duration_seconds"] = cursor.fetchone()[0] or 0
+    cursor = conn.execute("SELECT COUNT(DISTINCT channel_name) FROM trailers WHERE channel_name IS NOT NULL")
+    stats["unique_channels"] = cursor.fetchone()[0]
+
+    # Top channels by trailer count
+    cursor = conn.execute("""
+        SELECT channel_name, COUNT(*) as cnt, COALESCE(SUM(view_count), 0) as total_views
+        FROM trailers WHERE channel_name IS NOT NULL AND is_available = 1
+        GROUP BY channel_name ORDER BY cnt DESC LIMIT 20
+    """)
+    stats["top_channels"] = [{"name": r[0], "trailers": r[1], "views": r[2]} for r in cursor.fetchall()]
+
+    # Most viewed trailers
+    cursor = conn.execute("""
+        SELECT t.youtube_id, t.title, t.view_count, t.trailer_type, m.title as movie_title, m.imdb_id
+        FROM trailers t JOIN movies m ON m.id = t.movie_id
+        WHERE t.view_count IS NOT NULL AND t.is_available = 1
+        ORDER BY t.view_count DESC LIMIT 20
+    """)
+    stats["most_viewed"] = [
+        {"youtube_id": r[0], "title": r[1], "views": r[2], "type": r[3], "movie": r[4], "imdb_id": r[5]}
+        for r in cursor.fetchall()
+    ]
+
+    # Average duration by type
+    cursor = conn.execute("""
+        SELECT trailer_type, CAST(AVG(duration_seconds) AS INT) as avg_dur, COUNT(*) as cnt
+        FROM trailers WHERE duration_seconds IS NOT NULL AND is_available = 1
+        GROUP BY trailer_type ORDER BY cnt DESC
+    """)
+    stats["duration_by_type"] = {r[0]: {"avg_seconds": r[1], "count": r[2]} for r in cursor.fetchall()}
+
     output = OUTPUT_DIR / "stats.json"
     output.write_text(json.dumps(stats, separators=(",", ":")))
     print(f"  → {output}")

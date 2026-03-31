@@ -87,6 +87,15 @@ export interface SiteStats {
   languages: number
   by_type: Record<string, number>
   by_language: Record<string, number>
+  series_with_trailers?: number
+  total_series_trailers?: number
+  total_views?: number
+  total_likes?: number
+  avg_duration_seconds?: number
+  unique_channels?: number
+  top_channels?: { name: string; trailers: number; views: number }[]
+  most_viewed?: { youtube_id: string; title: string; views: number; type: string; movie: string; imdb_id: string }[]
+  duration_by_type?: Record<string, { avg_seconds: number; count: number }>
 }
 
 export interface SeriesIndex {

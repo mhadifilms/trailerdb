@@ -6,9 +6,9 @@ import { getWatchlist } from '../lib/storage'
 
 const NAV_ITEMS = [
   { label: 'Home', to: '/' },
-  { label: 'About', to: '/about' },
-  { label: 'Movie Trailers', to: '/browse' },
-  { label: 'Series Trailers', to: '/series' },
+  { label: 'Movies', to: '/browse' },
+  { label: 'Series', to: '/series' },
+  { label: 'Analytics', to: '/analytics' },
   { label: 'Developer', to: '/api-docs' },
 ]
 
