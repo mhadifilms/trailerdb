@@ -1031,6 +1031,103 @@ def export_analytics(conn: sqlite3.Connection):
     print(f"  → {output}")
 
 
+def export_queryable_trailers(conn: sqlite3.Connection):
+    """Export all trailers as a compact JSON array for the query builder."""
+    print("Exporting queryable trailers...")
+
+    # Pre-build movie_id -> genre_ids dict
+    movie_genres = get_movie_genres(conn)
+
+    # We need movie_id to look up genres, so fetch it too
+    cursor = conn.execute("""
+        SELECT t.youtube_id, t.movie_id, m.imdb_id, m.title, m.year, m.imdb_rating,
+               t.trailer_type, t.language, t.view_count, t.like_count,
+               t.duration_seconds, t.channel_name, t.published_at, t.is_official
+        FROM trailers t
+        JOIN movies m ON m.id = t.movie_id
+        WHERE t.is_available = 1
+        ORDER BY t.view_count DESC NULLS LAST
+    """)
+
+    trailers = []
+    for row in cursor.fetchall():
+        (youtube_id, movie_id, imdb_id, title, year, rating,
+         trailer_type, language, view_count, like_count,
+         duration_seconds, channel_name, published_at, is_official) = row
+
+        # Trim published_at to date only (YYYY-MM-DD)
+        pub_date = None
+        if published_at and len(published_at) >= 10:
+            pub_date = published_at[:10]
+
+        trailers.append({
+            "m": imdb_id,
+            "mt": title,
+            "y": year,
+            "r": rating,
+            "g": movie_genres.get(movie_id, []),
+            "t": trailer_type,
+            "l": language,
+            "v": view_count,
+            "lk": like_count,
+            "d": duration_seconds,
+            "ch": channel_name,
+            "p": pub_date,
+            "o": 1 if is_official else 0,
+        })
+
+    output = OUTPUT_DIR / "trailers-queryable.json"
+    output.write_text(json.dumps(trailers, separators=(",", ":")), encoding="utf-8")
+    size_mb = output.stat().st_size / 1024 / 1024
+    print(f"  → {output} ({len(trailers):,} trailers, {size_mb:.1f} MB)")
+
+
+def export_trending(conn: sqlite3.Connection):
+    """Pre-compute trending scores for recent trailers."""
+    print("Exporting trending trailers...")
+
+    cursor = conn.execute("""
+        SELECT t.youtube_id, m.imdb_id, m.title AS movie_title, t.title AS trailer_title,
+               m.year, m.poster_path, t.trailer_type, t.language, t.view_count,
+               t.published_at, t.channel_name,
+               CAST(julianday('now') - julianday(t.published_at) AS INT) AS days_old
+        FROM trailers t
+        JOIN movies m ON m.id = t.movie_id
+        WHERE t.is_available = 1 AND t.view_count IS NOT NULL AND t.published_at IS NOT NULL
+          AND t.published_at > date('now', '-365 days')
+        ORDER BY CAST(t.view_count AS REAL) / MAX(CAST(julianday('now') - julianday(t.published_at) AS INT), 1) DESC
+        LIMIT 200
+    """)
+
+    trending = []
+    for row in cursor.fetchall():
+        (youtube_id, imdb_id, movie_title, trailer_title,
+         year, poster, trailer_type, language, views,
+         published_at, channel_name, days_old) = row
+
+        days = max(days_old or 0, 1)
+        velocity = int(views / days)
+
+        trending.append({
+            "youtube_id": youtube_id,
+            "imdb_id": imdb_id,
+            "movie": movie_title,
+            "trailer": trailer_title,
+            "year": year,
+            "poster": poster,
+            "type": trailer_type,
+            "lang": language,
+            "views": views,
+            "days_old": days_old,
+            "velocity": velocity,
+            "channel": channel_name,
+        })
+
+    output = OUTPUT_DIR / "trending.json"
+    output.write_text(json.dumps(trending, separators=(",", ":")), encoding="utf-8")
+    print(f"  → {output} ({len(trending):,} trending trailers)")
+
+
 def export_sitemaps(movies: list, domain: str = "trailerdb.com"):
     """Generate sitemap index and chunked sitemaps."""
     print("Generating sitemaps...")
@@ -1103,6 +1200,8 @@ def main():
     export_channels(conn)
     export_timeline_stats(conn)
     export_analytics(conn)
+    export_queryable_trailers(conn)
+    export_trending(conn)
     export_sitemaps(movies)
 
     # Export series

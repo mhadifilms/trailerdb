@@ -235,3 +235,34 @@ export interface SeriesBrowseIndex {
   fields: string[]
   genres: Record<string, string>
 }
+
+export interface TrendingTrailer {
+  youtube_id: string
+  imdb_id: string
+  movie: string
+  trailer: string
+  year: number
+  poster: string | null
+  type: string
+  lang: string | null
+  views: number
+  days_old: number
+  velocity: number
+  channel: string | null
+}
+
+export interface QueryableTrailer {
+  m: string       // movie title
+  mt: string      // imdb_id (movie target)
+  y: number | null // year
+  r: number | null // rating
+  g: number[]     // genre ids
+  t: string       // type
+  l: string | null // language
+  v: number | null // views
+  lk: number | null // likes
+  d: number | null // duration
+  ch: string | null // channel
+  p: string | null // poster
+  o: number       // official (0/1)
+}

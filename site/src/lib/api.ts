@@ -1,5 +1,5 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
-import type { MovieDetail, GenreMeta, SiteStats, BrowseIndex, SeriesDetail, SeriesBrowseIndex, AnalyticsData } from './types'
+import type { MovieDetail, GenreMeta, SiteStats, BrowseIndex, SeriesDetail, SeriesBrowseIndex, AnalyticsData, TrendingTrailer, QueryableTrailer } from './types'
 import { parseIndex, parseShard, parseSeriesIndex, parseSeriesShard } from './utils'
 
 const BASE = import.meta.env.BASE_URL + 'data'
@@ -109,5 +109,22 @@ export function useAnalytics() {
   return useQuery({
     queryKey: ['analytics'],
     queryFn: () => fetchJson<AnalyticsData>('analytics.json'),
+  })
+}
+
+/** Fetch trending trailers */
+export function useTrending() {
+  return useQuery({
+    queryKey: ['trending'],
+    queryFn: () => fetchJson<TrendingTrailer[]>('trending.json'),
+  })
+}
+
+/** Fetch queryable trailers for explore mode */
+export function useQueryableTrailers() {
+  return useQuery({
+    queryKey: ['queryable'],
+    queryFn: () => fetchJson<QueryableTrailer[]>('trailers-queryable.json'),
+    staleTime: Infinity,
   })
 }
