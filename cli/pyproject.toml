@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trailerdb"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI tool for browsing and downloading movie trailers from TrailerDB"
 readme = "README.md"
 license = "MIT"
