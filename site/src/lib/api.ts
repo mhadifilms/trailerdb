@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
-import type { MovieDetail, GenreMeta, SiteStats, BrowseIndex } from './types'
-import { parseIndex, parseShard } from './utils'
+import type { MovieDetail, GenreMeta, SiteStats, BrowseIndex, SeriesDetail, SeriesBrowseIndex } from './types'
+import { parseIndex, parseShard, parseSeriesIndex, parseSeriesShard } from './utils'
 
 const BASE = import.meta.env.BASE_URL + 'data'
 
@@ -62,5 +62,44 @@ export function prefetchMovie(imdbId: string, queryClient: QueryClient) {
   queryClient.prefetchQuery({
     queryKey: ['movie', imdbId],
     queryFn: () => fetchJson<MovieDetail>(`movie/${imdbId}.json`),
+  })
+}
+
+/** Fetch the series browse index */
+export function useSeriesBrowseIndex() {
+  return useQuery({
+    queryKey: ['series-browse-index'],
+    queryFn: async () => {
+      const raw = await fetchJson<SeriesBrowseIndex>('series-index.json')
+      return parseSeriesIndex(raw)
+    },
+  })
+}
+
+/** Fetch a series detail file */
+export function useSeriesDetail(tmdbId: string | null) {
+  return useQuery({
+    queryKey: ['series', tmdbId],
+    queryFn: () => fetchJson<SeriesDetail>(`series/${tmdbId}.json`),
+    enabled: !!tmdbId,
+  })
+}
+
+/** Fetch a series browse shard */
+export function useSeriesBrowseShard(path: string) {
+  return useQuery({
+    queryKey: ['series-shard', path],
+    queryFn: async () => {
+      const raw = await fetchJson<(string | number | number[] | null)[][]>(`browse/${path}`)
+      return parseSeriesShard(raw)
+    },
+  })
+}
+
+/** Prefetch a series detail (for hover prefetching) */
+export function prefetchSeries(tmdbId: number, queryClient: QueryClient) {
+  queryClient.prefetchQuery({
+    queryKey: ['series', String(tmdbId)],
+    queryFn: () => fetchJson<SeriesDetail>(`series/${tmdbId}.json`),
   })
 }

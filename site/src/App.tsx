@@ -15,6 +15,12 @@ const Search = lazy(() => import('./pages/Search').then(m => ({ default: m.Searc
 const About = lazy(() => import('./pages/About').then(m => ({ default: m.About })))
 const API = lazy(() => import('./pages/API').then(m => ({ default: m.API })))
 const Export = lazy(() => import('./pages/Export').then(m => ({ default: m.Export })))
+const SeriesBrowse = lazy(() => import('./pages/SeriesBrowse').then(m => ({ default: m.SeriesBrowse })))
+const SeriesDetail = lazy(() => import('./pages/SeriesDetail').then(m => ({ default: m.SeriesDetail })))
+const Analytics = lazy(() => import('./pages/Analytics').then(m => ({ default: m.Analytics })))
+const Random = lazy(() => import('./pages/Random').then(m => ({ default: m.Random })))
+const WatchlistPage = lazy(() => import('./pages/Watchlist').then(m => ({ default: m.Watchlist })))
+const HistoryPage = lazy(() => import('./pages/History').then(m => ({ default: m.History })))
 
 // Error boundary
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -107,6 +113,12 @@ export function App() {
                   <Route path="/about" element={<About />} />
                   <Route path="/api-docs" element={<API />} />
                   <Route path="/export" element={<Export />} />
+                  <Route path="/series" element={<SeriesBrowse />} />
+                  <Route path="/series/:slug" element={<SeriesDetail />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/random" element={<Random />} />
+                  <Route path="/watchlist" element={<WatchlistPage />} />
+                  <Route path="/history" element={<HistoryPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AnimatedPage>

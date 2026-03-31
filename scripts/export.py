@@ -517,6 +517,181 @@ def export_timeline_stats(conn: sqlite3.Connection):
     print(f"  → {output}")
 
 
+def make_series_slug(name: str, tmdb_id: int) -> str:
+    """Generate a unique URL slug for a series."""
+    parts = [slugify(name)]
+    parts.append(str(tmdb_id))
+    return "-".join(parts)
+
+
+def get_series_genres(conn: sqlite3.Connection) -> dict[int, list[int]]:
+    """Get genre IDs per series."""
+    cursor = conn.execute("SELECT series_id, genre_id FROM series_genres")
+    result: dict[int, list[int]] = {}
+    for series_id, genre_id in cursor.fetchall():
+        result.setdefault(series_id, []).append(genre_id)
+    return result
+
+
+def get_series_trailer_counts(conn: sqlite3.Connection) -> dict[int, int]:
+    """Get trailer count per series."""
+    cursor = conn.execute("SELECT series_id, COUNT(*) FROM series_trailers GROUP BY series_id")
+    return {row[0]: row[1] for row in cursor.fetchall()}
+
+
+def export_series_index(conn: sqlite3.Connection, genre_map: dict, series_genres: dict, trailer_counts: dict):
+    """Export the compact series browse index."""
+    print("Exporting series index...")
+    cursor = conn.execute("""
+        SELECT s.id, s.tmdb_id, s.name, s.first_air_date, s.vote_average, s.vote_count,
+               s.poster_path, s.popularity
+        FROM series s
+        WHERE s.id IN (SELECT DISTINCT series_id FROM series_trailers)
+        ORDER BY s.vote_count DESC
+    """)
+
+    series_list = []
+    for row in cursor.fetchall():
+        sid, tmdb_id, name, first_air_date, vote_avg, vote_count, poster, popularity = row
+        # Extract year from first_air_date
+        year = None
+        if first_air_date and len(first_air_date) >= 4:
+            try:
+                year = int(first_air_date[:4])
+            except ValueError:
+                pass
+        slug = make_series_slug(name, tmdb_id)
+        genres = series_genres.get(sid, [])
+        count = trailer_counts.get(sid, 0)
+
+        series_list.append([
+            tmdb_id, name, year, vote_avg, vote_count,
+            poster, genres, slug, count, popularity or 0
+        ])
+
+    index = {
+        "series": series_list,
+        "fields": [
+            "tmdb_id", "name", "year", "rating", "votes",
+            "poster", "genre_ids", "slug", "trailer_count", "popularity"
+        ],
+        "genres": {str(k): v for k, v in genre_map.items()},
+    }
+
+    output = OUTPUT_DIR / "series-index.json"
+    output.write_text(json.dumps(index, separators=(",", ":")), encoding="utf-8")
+    print(f"  → {output} ({len(series_list):,} series, {output.stat().st_size / 1024 / 1024:.1f} MB)")
+    return series_list
+
+
+def export_series_details(conn: sqlite3.Connection, series_list: list, genre_map: dict, series_genres: dict):
+    """Export individual series detail files."""
+    print("Exporting series detail files...")
+    series_dir = OUTPUT_DIR / "series"
+    series_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fetch all series details
+    cursor = conn.execute("""
+        SELECT id, tmdb_id, name, original_name, first_air_date, overview,
+               poster_path, backdrop_path, status, number_of_seasons,
+               vote_average, vote_count, original_language
+        FROM series
+        WHERE id IN (SELECT DISTINCT series_id FROM series_trailers)
+    """)
+
+    series_rows = {row[0]: row for row in cursor.fetchall()}
+
+    # Fetch all series trailers
+    trailer_cursor = conn.execute("""
+        SELECT series_id, youtube_id, title, trailer_type, language, region,
+               is_official, published_at, quality
+        FROM series_trailers
+        WHERE is_available = 1
+        ORDER BY series_id,
+                 CASE trailer_type
+                     WHEN 'trailer' THEN 0 WHEN 'teaser' THEN 1 WHEN 'tv_spot' THEN 2
+                     WHEN 'red_band' THEN 3 WHEN 'imax' THEN 4 WHEN 'clip' THEN 5
+                     WHEN 'featurette' THEN 6 WHEN 'behind_the_scenes' THEN 7
+                     WHEN 'bloopers' THEN 8 ELSE 9
+                 END,
+                 is_official DESC,
+                 published_at DESC
+    """)
+
+    trailers_by_series: dict[int, list] = {}
+    for row in trailer_cursor.fetchall():
+        sid = row[0]
+        trailer_obj = {
+            "youtube_id": row[1],
+            "title": row[2],
+            "trailer_type": row[3],
+            "language": row[4],
+            "region": row[5],
+            "is_official": bool(row[6]),
+            "published_at": row[7],
+            "quality": row[8],
+        }
+        trailers_by_series.setdefault(sid, []).append(trailer_obj)
+
+    count = 0
+    for sid, row in series_rows.items():
+        _, tmdb_id, name, orig_name, first_air_date, overview, \
+            poster, backdrop, status, num_seasons, vote_avg, vote_count, orig_lang = row
+
+        slug = make_series_slug(name, tmdb_id)
+        genres_list = [genre_map[gid] for gid in series_genres.get(sid, []) if gid in genre_map]
+        trailers = trailers_by_series.get(sid, [])
+
+        detail = {
+            "tmdb_id": tmdb_id,
+            "name": name,
+            "original_name": orig_name,
+            "first_air_date": first_air_date,
+            "overview": overview,
+            "poster_path": poster,
+            "backdrop_path": backdrop,
+            "status": status,
+            "number_of_seasons": num_seasons,
+            "vote_average": vote_avg,
+            "vote_count": vote_count,
+            "original_language": orig_lang,
+            "genres": genres_list,
+            "slug": slug,
+            "trailers": trailers,
+        }
+
+        filepath = series_dir / f"{tmdb_id}.json"
+        filepath.write_text(json.dumps(detail, separators=(",", ":")), encoding="utf-8")
+        count += 1
+
+        if count % 10000 == 0:
+            print(f"  → {count:,} series files written...")
+
+    print(f"  → {series_dir}/ ({count:,} files)")
+
+
+def export_series_browse_shards(series_list: list):
+    """Export pre-sorted series browse shards."""
+    print("Exporting series browse shards...")
+    browse_dir = OUTPUT_DIR / "browse"
+    browse_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fields: tmdb_id=0, name=1, year=2, rating=3, votes=4, poster=5, genres=6, slug=7, count=8, popularity=9
+
+    # Trending (top 100 by popularity)
+    trending = sorted(series_list, key=lambda s: s[9] or 0, reverse=True)[:100]
+    (browse_dir / "series-trending.json").write_text(json.dumps(trending, separators=(",", ":")))
+
+    # Top rated (top 100 by vote_average, min 1000 votes)
+    top_rated = sorted(
+        [s for s in series_list if (s[4] or 0) >= 1000],
+        key=lambda s: s[3] or 0, reverse=True
+    )[:100]
+    (browse_dir / "series-top-rated.json").write_text(json.dumps(top_rated, separators=(",", ":")))
+
+    print(f"  → {browse_dir}/ (series shards created)")
+
+
 def export_sitemaps(movies: list, domain: str = "trailerdb.com"):
     """Generate sitemap index and chunked sitemaps."""
     print("Generating sitemaps...")
@@ -581,7 +756,7 @@ def main():
     movie_genres = get_movie_genres(conn)
     trailer_counts = get_movie_trailer_counts(conn)
 
-    # Export all tiers
+    # Export all tiers — movies
     movies = export_index(conn, genre_map, movie_genres, trailer_counts)
     export_browse_shards(movies, genre_map)
     export_movie_details(conn, movies, genre_map, movie_genres)
@@ -589,6 +764,13 @@ def main():
     export_channels(conn)
     export_timeline_stats(conn)
     export_sitemaps(movies)
+
+    # Export series
+    s_genres = get_series_genres(conn)
+    s_trailer_counts = get_series_trailer_counts(conn)
+    series_list = export_series_index(conn, genre_map, s_genres, s_trailer_counts)
+    export_series_details(conn, series_list, genre_map, s_genres)
+    export_series_browse_shards(series_list)
 
     conn.close()
     print()

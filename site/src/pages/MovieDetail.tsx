@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useParams, Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useMovieDetail } from '../lib/api'
-import { imdbIdFromSlug, posterUrl, backdropUrl, formatRuntime, formatVotes, ratingColor } from '../lib/utils'
+import { imdbIdFromSlug, posterUrl, backdropUrl, formatRuntime, formatVotes, ratingColor, getBrowserLanguage } from '../lib/utils'
 import { LANGUAGE_NAMES, LANGUAGE_FLAGS } from '../lib/constants'
+import { isInWatchlist, addToWatchlist, removeFromWatchlist } from '../lib/storage'
 import { TrailerSection } from '../components/TrailerSection'
-import { PlayerProvider } from '../components/PlayerContext'
+import { PlayerProvider, usePlayer } from '../components/PlayerContext'
 import { SEOHead, movieJsonLd } from '../components/SEOHead'
 import { MovieDetailSkeleton } from '../components/Skeleton'
 import { ContributeForm } from '../components/ContributeForm'
@@ -56,11 +57,106 @@ function LanguageFilter({ trailers, onChange, active }: { trailers: { language: 
   )
 }
 
+/** Banner showing trailers available in the user's browser language */
+function BrowserLanguageBanner({ trailers, trailerGroups }: { trailers: { language: string | null }[]; trailerGroups?: { languages: Record<string, unknown> }[] }) {
+  const browserLang = useMemo(() => getBrowserLanguage(), [])
+
+  // Don't show for English
+  if (browserLang === 'en') return null
+
+  // Count trailers in the detected language
+  let count = 0
+  if (trailerGroups && trailerGroups.length > 0) {
+    count = trailerGroups.filter((g) => g.languages[browserLang]).length
+  } else {
+    count = trailers.filter((t) => t.language === browserLang).length
+  }
+
+  if (count === 0) return null
+
+  const langName = LANGUAGE_NAMES[browserLang] || browserLang.toUpperCase()
+  const flag = LANGUAGE_FLAGS[browserLang] || ''
+
+  return (
+    <div className="mb-4 px-4 py-2.5 rounded-xl bg-bg-surface border border-border text-sm font-body text-text-secondary">
+      {flag} {count} {count === 1 ? 'trailer' : 'trailers'} available in {langName}
+    </div>
+  )
+}
+
+/** Handles deep-link hash scrolling + auto-play */
+function DeepLinkHandler() {
+  const { setActive } = usePlayer()
+  const location = useLocation()
+
+  useEffect(() => {
+    const hash = location.hash
+    if (!hash) return
+    const match = hash.match(/^#trailer-(.+)$/)
+    if (!match) return
+    const youtubeId = match[1]!
+
+    // Wait for DOM to render, then scroll + auto-play
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`trailer-${youtubeId}`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        setActive(youtubeId)
+      }
+    }, 600)
+
+    return () => clearTimeout(timer)
+  }, [location.hash, setActive])
+
+  return null
+}
+
+function WatchlistButton({ movieId }: { movieId: string }) {
+  const [inList, setInList] = useState(() => isInWatchlist(movieId))
+
+  const toggle = useCallback(() => {
+    if (inList) {
+      removeFromWatchlist(movieId)
+      setInList(false)
+    } else {
+      addToWatchlist(movieId)
+      setInList(true)
+    }
+  }, [movieId, inList])
+
+  return (
+    <button
+      onClick={toggle}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-body font-medium transition-colors cursor-pointer border border-border hover:border-border-hover bg-bg-surface hover:bg-bg-hover text-text-secondary"
+      aria-label={inList ? 'Remove from watchlist' : 'Add to watchlist'}
+      title={inList ? 'Remove from watchlist' : 'Add to watchlist'}
+    >
+      {inList ? (
+        <svg className="w-4 h-4 text-crimson" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+        </svg>
+      )}
+      {inList ? 'In Watchlist' : 'Watchlist'}
+    </button>
+  )
+}
+
 export function MovieDetail() {
   const { slug } = useParams<{ slug: string }>()
   const imdbId = slug ? imdbIdFromSlug(slug) : null
   const { data: movie, isLoading, error } = useMovieDetail(imdbId)
   const [filterLang, setFilterLang] = useState<string | null>(null)
+
+  const handleShare = useCallback((youtubeId: string) => {
+    const url = `https://trailerdb.org/movie/${slug}#trailer-${youtubeId}`
+    navigator.clipboard.writeText(url).catch(() => {
+      // Fallback: do nothing if clipboard API is unavailable
+    })
+  }, [slug])
 
   if (isLoading) return <MovieDetailSkeleton />
 
@@ -128,6 +224,7 @@ export function MovieDetail() {
 
   return (
     <PlayerProvider>
+      <DeepLinkHandler />
       <SEOHead
         title={`${movie.title} (${movie.year}) — All Trailers`}
         description={`Watch all ${movie.trailers.length} trailers for ${movie.title} (${movie.year}). ${movie.overview?.slice(0, 120) || ''}`}
@@ -180,9 +277,11 @@ export function MovieDetail() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="flex-1 pt-4 md:pt-12"
           >
-            <h1 className="font-display text-text-primary text-3xl md:text-4xl lg:text-5xl leading-tight">
-              {movie.title}
-            </h1>
+            <div className="flex items-start gap-3">
+              <h1 className="font-display text-text-primary text-3xl md:text-4xl lg:text-5xl leading-tight">
+                {movie.title}
+              </h1>
+            </div>
 
             {/* Metadata row */}
             <div className="flex flex-wrap items-center gap-3 mt-3 text-sm font-body">
@@ -204,6 +303,8 @@ export function MovieDetail() {
                   )}
                 </>
               )}
+              <span className="text-text-muted">·</span>
+              <WatchlistButton movieId={movie.imdb_id} />
             </div>
 
             {/* Genres */}
@@ -265,14 +366,33 @@ export function MovieDetail() {
           transition={{ duration: 0.6, delay: 0.5 }}
           className="mt-8"
         >
-          <h2 className="font-display text-text-primary text-2xl mb-3">
-            Trailers & Videos
-            <span className="text-text-muted text-lg ml-2">({movie.trailers.length})</span>
-          </h2>
+          <div className="flex items-baseline justify-between gap-4 mb-3">
+            <h2 className="font-display text-text-primary text-2xl">
+              Trailers & Videos
+              <span className="text-text-muted text-lg ml-2">({movie.trailers.length})</span>
+            </h2>
+            <Link
+              to={`/analytics?movie=${movie.imdb_id}`}
+              className="text-xs font-body text-text-muted hover:text-accent transition-colors inline-flex items-center gap-1 shrink-0"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+              </svg>
+              Analytics
+            </Link>
+          </div>
+
+          <BrowserLanguageBanner trailers={movie.trailers} trailerGroups={movie.trailer_groups} />
 
           <LanguageFilter trailers={movie.trailers} onChange={setFilterLang} active={filterLang} />
 
-          <TrailerSection trailers={movie.trailers} trailerGroups={movie.trailer_groups} filterLanguage={filterLang} />
+          <TrailerSection
+            trailers={movie.trailers}
+            trailerGroups={movie.trailer_groups}
+            filterLanguage={filterLang}
+            movieId={movie.imdb_id}
+            onShare={handleShare}
+          />
         </motion.section>
       </div>
     </PlayerProvider>

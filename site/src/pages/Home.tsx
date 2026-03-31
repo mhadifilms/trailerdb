@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useBrowseShard, useBrowseIndex } from '../lib/api'
+import { useBrowseShard, useBrowseIndex, useSeriesBrowseIndex } from '../lib/api'
 import { useSearch } from '../lib/searchContext'
-import { searchMovies } from '../lib/search'
+import { searchMovies, searchSeries } from '../lib/search'
 import { posterUrl } from '../lib/utils'
-import type { MovieIndex } from '../lib/types'
+import type { MovieIndex, SeriesIndex } from '../lib/types'
 import { MovieCard } from '../components/MovieCard'
 import { HorizontalScroll } from '../components/HorizontalScroll'
 import { SEOHead } from '../components/SEOHead'
@@ -186,7 +186,9 @@ function HeroSearch() {
   const { open: openSearch, close: closeSearch, isOpen, prefill, clearPrefill } = useSearch()
   const [showFilters, setShowFilters] = useState(false)
 
+  const { data: seriesData } = useSeriesBrowseIndex()
   const results = data ? searchMovies(data.movies, deferredQuery, 10) : []
+  const seriesResults = seriesData ? searchSeries(seriesData.series, deferredQuery, 5) : []
   const showResults = focused && deferredQuery.length >= 2
 
   // Click outside to close
@@ -220,6 +222,7 @@ function HeroSearch() {
 
   const handleFocus = () => { setFocused(true); openSearch() }
   const goTo = (movie: MovieIndex) => { navigate(`/movie/${movie.slug}`); setFocused(false); setQuery(''); closeSearch() }
+  const goToSeries = (s: SeriesIndex) => { navigate(`/series/${s.slug}`); setFocused(false); setQuery(''); closeSearch() }
 
   return (
     <div ref={containerRef} className="w-full max-w-[639px] relative z-30">
@@ -319,7 +322,7 @@ function HeroSearch() {
         )}
 
         {/* Expanded results — grows from the search bar */}
-        {showResults && results.length > 0 && (
+        {showResults && (results.length > 0 || seriesResults.length > 0) && (
           <div>
             <div className="mx-10 border-t border-[#e5e5e5]" />
             <div className="px-10 pt-3 pb-5">
@@ -353,17 +356,29 @@ function HeroSearch() {
                 </div>
               </div>
 
-              {/* Series placeholder */}
+              {/* Series results */}
               <div className="mb-4">
                 <h3 className="font-display text-[#383838] text-base tracking-[-0.02em] mb-2.5">Series</h3>
-                <div className="flex gap-2 opacity-40">
-                  {[0, 1, 2].map((i) => (
-                    <div key={i} className="shrink-0 w-[98px]">
-                      <div className="w-[98px] h-[125px] rounded-[10px] bg-[#d9d9d9]" />
-                      <p className="font-body text-[#383838] text-xs mt-1.5">Coming soon</p>
+                {seriesResults.length > 0 ? (
+                  <div className="flex gap-2 items-start">
+                    <div className="flex gap-2 flex-1 overflow-x-auto hide-scrollbar">
+                      {seriesResults.slice(0, 5).map((s) => (
+                        <button key={s.tmdb_id} onClick={() => goToSeries(s)} className="shrink-0 w-[98px] cursor-pointer group text-left">
+                          <div className="w-[98px] h-[125px] rounded-[10px] overflow-hidden bg-[#d9d9d9]">
+                            {s.poster ? (
+                              <img src={posterUrl(s.poster, 'w185')!} alt={s.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-text-muted text-[10px] font-body p-1 text-center">{s.name}</div>
+                            )}
+                          </div>
+                          <p className="font-body text-[#383838] text-xs tracking-[-0.02em] mt-1.5 truncate group-hover:text-text-muted transition-colors">{s.name}</p>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-text-muted text-xs font-body">No series found</p>
+                )}
               </div>
 
               {/* Not finding */}
@@ -380,7 +395,7 @@ function HeroSearch() {
         )}
 
         {/* No results */}
-        {showResults && results.length === 0 && data && (
+        {showResults && results.length === 0 && seriesResults.length === 0 && data && (
           <div>
             <div className="mx-10 border-t border-[#e5e5e5]" />
             <div className="px-10 py-6 text-center">

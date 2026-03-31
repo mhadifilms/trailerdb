@@ -18,6 +18,8 @@ export function Footer() {
         <div className="flex flex-wrap justify-center gap-6 text-sm font-body text-text-muted">
           <Link to="/about" className="hover:text-text-primary transition-colors">About</Link>
           <Link to="/browse" className="hover:text-text-primary transition-colors">Browse</Link>
+          <Link to="/analytics" className="hover:text-text-primary transition-colors">Analytics</Link>
+          <Link to="/random" className="hover:text-text-primary transition-colors">Random</Link>
           <Link to="/api-docs" className="hover:text-text-primary transition-colors">API</Link>
           <a
             href="https://github.com/mhadifilms/trailerdb"

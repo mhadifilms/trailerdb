@@ -88,3 +88,51 @@ export interface SiteStats {
   by_type: Record<string, number>
   by_language: Record<string, number>
 }
+
+export interface SeriesIndex {
+  tmdb_id: number
+  name: string
+  year: number | null
+  rating: number | null
+  votes: number | null
+  poster: string | null
+  genre_ids: number[]
+  slug: string
+  trailer_count: number
+  popularity: number
+}
+
+export interface SeriesDetail {
+  tmdb_id: number
+  name: string
+  original_name: string | null
+  first_air_date: string | null
+  overview: string | null
+  poster_path: string | null
+  backdrop_path: string | null
+  status: string | null
+  number_of_seasons: number | null
+  vote_average: number | null
+  vote_count: number | null
+  original_language: string | null
+  genres: string[]
+  slug: string
+  trailers: SeriesTrailer[]
+}
+
+export interface SeriesTrailer {
+  youtube_id: string
+  title: string | null
+  trailer_type: TrailerType
+  language: string | null
+  region: string | null
+  is_official: boolean
+  published_at: string | null
+  quality: number | null
+}
+
+export interface SeriesBrowseIndex {
+  series: (string | number | number[] | null)[][]
+  fields: string[]
+  genres: Record<string, string>
+}

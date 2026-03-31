@@ -67,6 +67,11 @@ async def cmd_group_trailers():
     await run()
 
 
+async def cmd_daily_update():
+    from scripts.daily_update import run
+    await run()
+
+
 async def cmd_all():
     """Run phases 0 through 2a sequentially (minimum viable database)."""
     await cmd_phase0()
@@ -241,6 +246,7 @@ COMMANDS = {
     "phase7a": cmd_phase7a,
     "analytics": cmd_analytics,
     "group-trailers": cmd_group_trailers,
+    "daily-update": cmd_daily_update,
     "all": cmd_all,
     "status": cmd_status,
     "stats": cmd_stats,
@@ -264,6 +270,7 @@ def main():
         print("  phase7a  Collect subtitle/audio/format metadata (top 10K movies)")
         print("  analytics  Compute analytics (timeline + confidence + channels)")
         print("  group-trailers  Group trailers by language (same trailer, different langs)")
+        print("  daily-update  Daily incremental update (new movies, series, trailers)")
         print("  all      Run phases 0-2a (minimum viable database)")
         print("  status   Show ingestion progress")
         print("  stats    Show database statistics")

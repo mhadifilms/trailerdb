@@ -1,4 +1,4 @@
-import type { MovieIndex, BrowseIndex } from './types'
+import type { MovieIndex, BrowseIndex, SeriesIndex, SeriesBrowseIndex } from './types'
 
 /** Parse the compact array-of-arrays index into MovieIndex objects */
 export function parseIndex(data: BrowseIndex): { movies: MovieIndex[]; genres: Record<string, string> } {
@@ -39,6 +39,45 @@ export function parseShard(data: (string | number | number[] | null)[][]): Movie
 export function imdbIdFromSlug(slug: string): string | null {
   const match = slug.match(/(tt\d+)$/)
   return match ? match[1]! : null
+}
+
+/** Extract TMDB ID from a series slug (last numeric segment) */
+export function tmdbIdFromSlug(slug: string): string | null {
+  const match = slug.match(/(\d+)$/)
+  return match ? match[1]! : null
+}
+
+/** Parse the compact array-of-arrays series index into SeriesIndex objects */
+export function parseSeriesIndex(data: SeriesBrowseIndex): { series: SeriesIndex[]; genres: Record<string, string> } {
+  const series: SeriesIndex[] = data.series.map((s) => ({
+    tmdb_id: s[0] as number,
+    name: s[1] as string,
+    year: s[2] as number | null,
+    rating: s[3] as number | null,
+    votes: s[4] as number | null,
+    poster: s[5] as string | null,
+    genre_ids: s[6] as number[],
+    slug: s[7] as string,
+    trailer_count: s[8] as number,
+    popularity: (s[9] as number) || 0,
+  }))
+  return { series, genres: data.genres }
+}
+
+/** Parse a series browse shard array into SeriesIndex objects */
+export function parseSeriesShard(data: (string | number | number[] | null)[][]): SeriesIndex[] {
+  return data.map((s) => ({
+    tmdb_id: s[0] as number,
+    name: s[1] as string,
+    year: s[2] as number | null,
+    rating: s[3] as number | null,
+    votes: s[4] as number | null,
+    poster: s[5] as string | null,
+    genre_ids: s[6] as number[],
+    slug: s[7] as string,
+    trailer_count: s[8] as number,
+    popularity: (s[9] as number) || 0,
+  }))
 }
 
 /** Build TMDB poster URL */
@@ -99,4 +138,24 @@ export function formatDate(dateStr: string | null): string | null {
   } catch {
     return null
   }
+}
+
+/** Detect the browser's primary language as an ISO 639-1 code */
+export function getBrowserLanguage(): string {
+  if (typeof navigator === 'undefined') return 'en'
+  return navigator.language.split('-')[0] || 'en'
+}
+
+/** Format a timestamp as a relative time string ("2 hours ago", "3 days ago") */
+export function timeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return 'just now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  return `${months}mo ago`
 }

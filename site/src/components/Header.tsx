@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useSearch } from '../lib/searchContext'
 import { SearchOverlay } from './SearchOverlay'
+import { getWatchlist } from '../lib/storage'
 
 const NAV_ITEMS = [
   { label: 'Home', to: '/' },
   { label: 'About', to: '/about' },
   { label: 'Movie Trailers', to: '/browse' },
-  { label: 'TV Trailers', to: '/browse?type=series' },
+  { label: 'Series Trailers', to: '/series' },
   { label: 'Developer', to: '/api-docs' },
 ]
 
@@ -15,6 +16,7 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [overlayOpen, setOverlayOpen] = useState(false)
+  const [watchlistCount, setWatchlistCount] = useState(0)
   const { open: openSearch } = useSearch()
   const location = useLocation()
   const isHome = location.pathname === '/'
@@ -36,6 +38,21 @@ export function Header() {
   }, [])
 
   useEffect(() => { setMenuOpen(false); setOverlayOpen(false) }, [location])
+
+  // Update watchlist count on route change and on storage events
+  useEffect(() => {
+    setWatchlistCount(getWatchlist().length)
+  }, [location])
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'tdb_watchlist') {
+        setWatchlistCount(getWatchlist().length)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +89,22 @@ export function Header() {
               </div>
             ))}
             <span className="text-black text-base font-display mx-4 mb-[1px]">|</span>
+            {/* Watchlist icon */}
+            <Link
+              to="/watchlist"
+              className="relative text-black hover:text-text-muted transition-colors mb-[2px] mr-3"
+              aria-label="Watchlist"
+              title="Watchlist"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+              </svg>
+              {watchlistCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-crimson text-white text-[10px] font-body font-bold leading-none px-1">
+                  {watchlistCount}
+                </span>
+              )}
+            </Link>
             <button
               onClick={() => triggerSearch()}
               className="text-black hover:text-text-muted transition-colors cursor-pointer mb-[2px]"
@@ -89,6 +122,21 @@ export function Header() {
               Trailer Database
             </Link>
             <div className="flex items-center gap-2">
+              {/* Watchlist icon (mobile) */}
+              <Link
+                to="/watchlist"
+                className="relative p-2 text-text-secondary hover:text-text-primary transition-colors"
+                aria-label="Watchlist"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                </svg>
+                {watchlistCount > 0 && (
+                  <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-crimson text-white text-[10px] font-body font-bold leading-none px-1">
+                    {watchlistCount}
+                  </span>
+                )}
+              </Link>
               <button
                 onClick={() => triggerSearch()}
                 className="p-2 text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
@@ -124,6 +172,12 @@ export function Header() {
                 {item.label}
               </Link>
             ))}
+            <Link to="/watchlist" className="block font-display text-lg text-black hover:text-text-muted">
+              Watchlist {watchlistCount > 0 && <span className="text-text-muted text-sm">({watchlistCount})</span>}
+            </Link>
+            <Link to="/history" className="block font-display text-lg text-black hover:text-text-muted">
+              History
+            </Link>
           </nav>
         )}
       </header>

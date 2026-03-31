@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useDeferredValue } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useBrowseIndex } from '../lib/api'
-import { searchMovies } from '../lib/search'
+import { useBrowseIndex, useSeriesBrowseIndex } from '../lib/api'
+import { searchMovies, searchSeries } from '../lib/search'
 import { posterUrl } from '../lib/utils'
-import type { MovieIndex } from '../lib/types'
+import type { MovieIndex, SeriesIndex } from '../lib/types'
 
 /**
  * Search overlay modal — used on non-home pages.
@@ -17,10 +17,12 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
   const panelRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const { data } = useBrowseIndex()
+  const { data: seriesData } = useSeriesBrowseIndex()
 
   const results = data ? searchMovies(data.movies, deferredQuery, 10) : []
-  const hasResults = deferredQuery.length >= 2 && results.length > 0
-  const noResults = deferredQuery.length >= 2 && results.length === 0 && !!data
+  const seriesResults = seriesData ? searchSeries(seriesData.series, deferredQuery, 5) : []
+  const hasResults = deferredQuery.length >= 2 && (results.length > 0 || seriesResults.length > 0)
+  const noResults = deferredQuery.length >= 2 && results.length === 0 && seriesResults.length === 0 && !!data
 
   useEffect(() => {
     if (open) {
@@ -38,6 +40,11 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
 
   const goTo = useCallback((movie: MovieIndex) => {
     navigate(`/movie/${movie.slug}`)
+    onClose()
+  }, [navigate, onClose])
+
+  const goToSeries = useCallback((s: SeriesIndex) => {
+    navigate(`/series/${s.slug}`)
     onClose()
   }, [navigate, onClose])
 
@@ -130,17 +137,29 @@ export function SearchOverlay({ open, onClose }: { open: boolean; onClose: () =>
                     </div>
                   </div>
 
-                  {/* Series placeholder */}
+                  {/* Series results */}
                   <div className="mb-4">
                     <h3 className="font-display text-[#383838] text-base tracking-[-0.02em] mb-2.5">Series</h3>
-                    <div className="flex gap-2 opacity-40">
-                      {[0, 1, 2].map((i) => (
-                        <div key={i} className="shrink-0 w-[98px]">
-                          <div className="w-[98px] h-[125px] rounded-[10px] bg-[#d9d9d9]" />
-                          <p className="font-body text-[#383838] text-xs mt-1.5">Coming soon</p>
+                    {seriesResults.length > 0 ? (
+                      <div className="flex gap-2 items-start">
+                        <div className="flex gap-2 flex-1 overflow-x-auto hide-scrollbar">
+                          {seriesResults.slice(0, 5).map((s) => (
+                            <button key={s.tmdb_id} onClick={() => goToSeries(s)} className="shrink-0 w-[98px] cursor-pointer group text-left">
+                              <div className="w-[98px] h-[125px] rounded-[10px] overflow-hidden bg-[#d9d9d9]">
+                                {s.poster ? (
+                                  <img src={posterUrl(s.poster, 'w185')!} alt={s.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-text-muted text-[10px] font-body p-1 text-center">{s.name}</div>
+                                )}
+                              </div>
+                              <p className="font-body text-[#383838] text-xs tracking-[-0.02em] mt-1.5 truncate group-hover:text-text-muted transition-colors">{s.name}</p>
+                            </button>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ) : (
+                      <p className="text-text-muted text-xs font-body">No series found</p>
+                    )}
                   </div>
 
                   {/* Not finding */}

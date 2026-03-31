@@ -11,7 +11,7 @@ const INITIAL_SHOW = 3
 const LOAD_MORE_INCREMENT = 6
 
 /** A single trailer group with language switcher */
-function GroupedTrailerCard({ group }: { group: TrailerGroup }) {
+function GroupedTrailerCard({ group, movieId, onShare }: { group: TrailerGroup; movieId?: string; onShare?: (youtubeId: string) => void }) {
   const langs = Object.keys(group.languages)
   const [activeLang, setActiveLang] = useState(langs.includes('en') ? 'en' : langs[0] || 'en')
   const active = group.languages[activeLang] || Object.values(group.languages)[0]
@@ -19,8 +19,8 @@ function GroupedTrailerCard({ group }: { group: TrailerGroup }) {
   if (!active) return null
 
   return (
-    <article className="group">
-      <TrailerPlayer youtubeId={active.youtube_id} title={active.title} />
+    <article className="group" id={`trailer-${active.youtube_id}`}>
+      <TrailerPlayer youtubeId={active.youtube_id} title={active.title} movieId={movieId} onShare={onShare} />
       <div className="mt-2 px-0.5">
         <h4 className="text-text-primary text-sm font-body font-medium leading-tight line-clamp-2">
           {group.title || active.title || 'Untitled'}
@@ -61,10 +61,10 @@ function GroupedTrailerCard({ group }: { group: TrailerGroup }) {
 }
 
 /** Fallback: plain trailer card (no grouping) */
-function PlainTrailerCard({ trailer }: { trailer: Trailer }) {
+function PlainTrailerCard({ trailer, movieId, onShare }: { trailer: Trailer; movieId?: string; onShare?: (youtubeId: string) => void }) {
   return (
-    <article>
-      <TrailerPlayer youtubeId={trailer.youtube_id} title={trailer.title} />
+    <article id={`trailer-${trailer.youtube_id}`}>
+      <TrailerPlayer youtubeId={trailer.youtube_id} title={trailer.title} movieId={movieId} onShare={onShare} />
       <div className="mt-2 px-0.5">
         <h4 className="text-text-primary text-sm font-body font-medium leading-tight line-clamp-2">
           {trailer.title || 'Untitled'}
@@ -85,10 +85,12 @@ function PlainTrailerCard({ trailer }: { trailer: Trailer }) {
   )
 }
 
-function TypeGroupSection({ type, groups, fallbackTrailers }: {
+function TypeGroupSection({ type, groups, fallbackTrailers, movieId, onShare }: {
   type: TrailerType
   groups: TrailerGroup[]
   fallbackTrailers: Trailer[]
+  movieId?: string
+  onShare?: (youtubeId: string) => void
 }) {
   const config = TRAILER_TYPE_CONFIG[type]
   const items = groups.length > 0 ? groups : null
@@ -120,12 +122,12 @@ function TypeGroupSection({ type, groups, fallbackTrailers }: {
           {items
             ? items.slice(0, showCount).map((g) => (
                 <motion.div key={g.group_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} layout>
-                  <GroupedTrailerCard group={g} />
+                  <GroupedTrailerCard group={g} movieId={movieId} onShare={onShare} />
                 </motion.div>
               ))
             : fallbackTrailers.slice(0, showCount).map((t) => (
                 <motion.div key={t.youtube_id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} layout>
-                  <PlainTrailerCard trailer={t} />
+                  <PlainTrailerCard trailer={t} movieId={movieId} onShare={onShare} />
                 </motion.div>
               ))
           }
@@ -145,10 +147,12 @@ function TypeGroupSection({ type, groups, fallbackTrailers }: {
   )
 }
 
-export function TrailerSection({ trailers, trailerGroups, filterLanguage }: {
+export function TrailerSection({ trailers, trailerGroups, filterLanguage, movieId, onShare }: {
   trailers: Trailer[]
   trailerGroups?: TrailerGroup[]
   filterLanguage?: string | null
+  movieId?: string
+  onShare?: (youtubeId: string) => void
 }) {
   // Group trailer_groups by type, filtering by language if set
   const groupsByType = new Map<TrailerType, TrailerGroup[]>()
@@ -194,6 +198,8 @@ export function TrailerSection({ trailers, trailerGroups, filterLanguage }: {
           type={type}
           groups={groupsByType.get(type) || []}
           fallbackTrailers={flatByType.get(type) || []}
+          movieId={movieId}
+          onShare={onShare}
         />
       ))}
     </div>
