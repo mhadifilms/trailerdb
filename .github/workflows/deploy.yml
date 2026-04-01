@@ -20,16 +20,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Export database to JSON
-        run: python scripts/export.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,6 +41,7 @@ jobs:
           cp site/public/robots.txt site/dist/robots.txt
           cp site/public/llms.txt site/dist/llms.txt
           cp site/public/404.html site/dist/404.html
+          cp site/public/CNAME site/dist/CNAME
           cp site/public/sitemap-*.xml site/dist/ 2>/dev/null || true
 
       - name: Upload artifact
