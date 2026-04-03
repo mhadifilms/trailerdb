@@ -129,15 +129,19 @@ function generateInsights(analytics: AnalyticsData) {
     })
   }
 
-  // 2. Top performing type
-  const sortedTypes = [...analytics.by_type].sort((a, b) => b.avg_views - a.avg_views)
+  // 2. Top performing type (exclude clips — they include music videos which skew data)
+  const sortedTypes = [...analytics.by_type]
+    .filter((t) => t.type !== 'clip')
+    .sort((a, b) => b.avg_views - a.avg_views)
   const topType = sortedTypes[0]
-  if (topType) {
+  const trailerType = analytics.by_type.find((t) => t.type === 'trailer')
+  if (topType && trailerType) {
     const config = TRAILER_TYPE_CONFIG[topType.type as TrailerType]
+    const mult = (topType.avg_views / trailerType.avg_views).toFixed(1)
     insights.push({
       title: 'Top Performing Type',
       value: config?.label || topType.type,
-      description: `Averages ${formatNum(topType.avg_views)} views per upload across ${formatNum(topType.count)} trailers in the database.`,
+      description: `Averages ${formatNum(topType.avg_views)} views per upload — ${mult}x more than standard trailers.`,
       accent: config?.color || '#000',
     })
   }
@@ -206,10 +210,14 @@ export function TrendingFeed() {
 
   const insights = analytics ? generateInsights(analytics) : []
 
-  const mostViewed = analytics?.most_viewed.slice(0, 5) ?? []
+  // Filter out clips from most viewed (they're music videos, not trailers)
+  const mostViewed = analytics?.most_viewed
+    .filter((mv) => mv.type !== 'clip')
+    .slice(0, 5) ?? []
   const topViewedMax = mostViewed.length > 0 ? mostViewed[0]!.views : 1
 
   return (
+    <div>
     <div className="flex flex-col lg:flex-row gap-8">
       {/* Left: Trending feed (2/3) */}
       <div className="flex-1 lg:w-2/3 min-w-0">
@@ -295,13 +303,18 @@ export function TrendingFeed() {
               <h3 className="font-display text-text-primary text-lg mb-3">Most Viewed</h3>
               <div className="rounded-xl bg-bg-surface border border-border p-3">
                 {mostViewed.map((mv, i) => (
-                  <LeaderboardEntry
+                  <a
                     key={mv.youtube_id}
-                    rank={i + 1}
-                    title={`${mv.movie} - ${mv.title}`}
-                    value={mv.views}
-                    maxValue={topViewedMax}
-                  />
+                    href={`/analytics?movie=${mv.imdb_id}`}
+                    className="block hover:bg-bg-hover rounded-lg transition-colors -mx-1 px-1"
+                  >
+                    <LeaderboardEntry
+                      rank={i + 1}
+                      title={`${mv.movie} - ${mv.title}`}
+                      value={mv.views}
+                      maxValue={topViewedMax}
+                    />
+                  </a>
                 ))}
               </div>
             </div>
@@ -309,11 +322,13 @@ export function TrendingFeed() {
         )}
       </div>
 
-      {/* Bottom: Insights (full width, rendered below on mobile) */}
+      </div>
+
+      {/* Bottom: Insights (full width below the 2-col layout) */}
       {insights.length > 0 && (
-        <div className="w-full lg:col-span-2">
+        <div className="mt-8">
           <h3 className="font-display text-text-primary text-lg mb-3">Key Insights</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {insights.map((insight, i) => (
               <InsightCard key={i} {...insight} />
             ))}
