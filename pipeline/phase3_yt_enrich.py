@@ -1,4 +1,9 @@
-"""Phase 3: Enrich trailers with YouTube metadata (view counts, duration, etc.)."""
+"""Phase 3: Enrich trailers with YouTube metadata (view counts, duration, etc.).
+
+Expanded version: captures snippet, statistics, contentDetails, status, and topicDetails
+to populate description, tags, category, thumbnail, comment_count, embeddable,
+age-restriction, default language, and caption availability.
+"""
 
 import asyncio
 import logging
@@ -13,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50  # YouTube API allows up to 50 IDs per call
 DAILY_QUOTA = 10_000  # YouTube API daily quota units
+DESCRIPTION_MAX_LEN = 2000
 
 
 def parse_iso8601_duration(duration: str) -> int | None:
@@ -35,7 +41,7 @@ async def fetch_youtube_metadata(
     params = {
         "key": YOUTUBE_API_KEY,
         "id": ",".join(youtube_ids),
-        "part": "snippet,statistics,contentDetails",
+        "part": "snippet,statistics,contentDetails,status,topicDetails",
     }
 
     async with session.get(url, params=params) as resp:
@@ -52,23 +58,63 @@ async def fetch_youtube_metadata(
         snippet = item.get("snippet", {})
         stats = item.get("statistics", {})
         content = item.get("contentDetails", {})
+        status = item.get("status", {})
+
+        # Description: truncate to DESCRIPTION_MAX_LEN chars
+        description = snippet.get("description", "") or ""
+        if len(description) > DESCRIPTION_MAX_LEN:
+            description = description[:DESCRIPTION_MAX_LEN]
+
+        # Tags: comma-separated
+        tags_list = snippet.get("tags") or []
+        tags = ",".join(tags_list) if tags_list else None
+
+        # Thumbnail: prefer high, fall back to medium, then default
+        thumbnails = snippet.get("thumbnails", {})
+        thumbnail_url = None
+        for quality in ("high", "medium", "default"):
+            if quality in thumbnails:
+                thumbnail_url = thumbnails[quality].get("url")
+                if thumbnail_url:
+                    break
+
+        # Age restriction
+        content_rating = content.get("contentRating", {})
+        is_age_restricted = 1 if content_rating.get("ytRating") == "ytAgeRestricted" else 0
+
+        # Default language: prefer defaultLanguage, fall back to defaultAudioLanguage
+        default_language = snippet.get("defaultLanguage") or snippet.get("defaultAudioLanguage")
+
+        # Caption available
+        caption_available = 1 if content.get("caption") == "true" else 0
 
         results[vid] = {
+            # Original fields
             "channel_name": snippet.get("channelTitle"),
             "channel_id": snippet.get("channelId"),
             "yt_title": snippet.get("title"),
             "duration_seconds": parse_iso8601_duration(content.get("duration")),
             "view_count": int(stats.get("viewCount", 0)) if stats.get("viewCount") else None,
             "like_count": int(stats.get("likeCount", 0)) if stats.get("likeCount") else None,
+            # Expanded fields
+            "description": description or None,
+            "tags": tags,
+            "category_id": int(snippet["categoryId"]) if snippet.get("categoryId") else None,
+            "thumbnail_url": thumbnail_url,
+            "comment_count": int(stats["commentCount"]) if stats.get("commentCount") else None,
+            "is_embeddable": 1 if status.get("embeddable") else 0,
+            "is_age_restricted": is_age_restricted,
+            "default_language": default_language,
+            "caption_available": caption_available,
         }
 
     return results
 
 
 async def run():
-    """Execute Phase 3: YouTube Metadata Enrichment."""
+    """Execute Phase 3: YouTube Metadata Enrichment (expanded)."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    logger.info("=== Phase 3: YouTube Metadata Enrichment ===")
+    logger.info("=== Phase 3: YouTube Metadata Enrichment (Expanded) ===")
 
     if not YOUTUBE_API_KEY:
         logger.error("YOUTUBE_API_KEY not set. Skipping Phase 3.")
@@ -76,10 +122,23 @@ async def run():
 
     db = await get_connection()
 
-    # Get all YouTube IDs that haven't been enriched yet
+    # Run migrations to ensure new columns exist
+    import sqlite3 as _sqlite3
+    from pipeline.db import MIGRATIONS
+    for migration in MIGRATIONS:
+        try:
+            await db.execute(migration)
+        except Exception:
+            pass  # Column already exists
+    await db.commit()
+
+    # Get trailers that need enrichment:
+    # 1. Never enriched (channel_name IS NULL AND is_available = 1)
+    # 2. Previously enriched but missing new fields (channel_name IS NOT NULL AND description IS NULL)
     cursor = await db.execute(
         """SELECT DISTINCT youtube_id FROM trailers
-           WHERE channel_name IS NULL AND is_available = 1
+           WHERE is_available = 1
+             AND (channel_name IS NULL OR description IS NULL)
            ORDER BY id"""
     )
     rows = await cursor.fetchall()
@@ -118,7 +177,11 @@ async def run():
                         await db.execute(
                             """UPDATE trailers SET
                                 channel_name = ?, channel_id = ?, yt_title = ?,
-                                duration_seconds = ?, view_count = ?, like_count = ?
+                                duration_seconds = ?, view_count = ?, like_count = ?,
+                                description = ?, tags = ?, category_id = ?,
+                                thumbnail_url = ?, comment_count = ?,
+                                is_embeddable = ?, is_age_restricted = ?,
+                                default_language = ?, caption_available = ?
                                WHERE youtube_id = ?""",
                             (
                                 meta["channel_name"],
@@ -127,12 +190,21 @@ async def run():
                                 meta["duration_seconds"],
                                 meta["view_count"],
                                 meta["like_count"],
+                                meta["description"],
+                                meta["tags"],
+                                meta["category_id"],
+                                meta["thumbnail_url"],
+                                meta["comment_count"],
+                                meta["is_embeddable"],
+                                meta["is_age_restricted"],
+                                meta["default_language"],
+                                meta["caption_available"],
                                 yt_id,
                             ),
                         )
                         enriched += 1
                     else:
-                        # Video not found — likely taken down or private
+                        # Video not found -- likely taken down or private
                         await db.execute(
                             "UPDATE trailers SET is_available = 0 WHERE youtube_id = ?",
                             (yt_id,),

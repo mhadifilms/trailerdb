@@ -57,6 +57,21 @@ async def cmd_phase7a():
     await run()
 
 
+async def cmd_phase8():
+    from pipeline.phase8_comments import run
+    await run()
+
+
+async def cmd_phase8a():
+    from pipeline.phase8a_comments_top import run
+    await run()
+
+
+async def cmd_phase9():
+    from pipeline.phase9_sentiment import run
+    await run()
+
+
 async def cmd_analytics():
     from scripts.compute_analytics import run
     await run()
@@ -123,6 +138,54 @@ async def cmd_status():
         if total_yt > 0:
             pct = done_yt / total_yt * 100
             print(f"  subtitle_audio: {done_yt:,}/{total_yt:,} ({pct:.1f}%)")
+    except Exception:
+        pass
+
+    # Phase 3 expanded progress
+    try:
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT youtube_id) FROM trailers WHERE is_available = 1"
+        )
+        total_yt = (await cursor.fetchone())[0]
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT youtube_id) FROM trailers WHERE is_available = 1 AND description IS NOT NULL"
+        )
+        enriched_expanded = (await cursor.fetchone())[0]
+        if total_yt > 0:
+            pct = enriched_expanded / total_yt * 100
+            print(f"  yt_expanded:    {enriched_expanded:,}/{total_yt:,} ({pct:.1f}%)")
+    except Exception:
+        pass
+
+    # Phase 8 comments progress
+    try:
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT youtube_id) FROM trailers WHERE is_available = 1"
+        )
+        total_yt = (await cursor.fetchone())[0]
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT youtube_id) FROM trailer_comments"
+        )
+        done_comments = (await cursor.fetchone())[0]
+        if total_yt > 0:
+            pct = done_comments / total_yt * 100
+            print(f"  comments:       {done_comments:,}/{total_yt:,} ({pct:.1f}%)")
+    except Exception:
+        pass
+
+    # Phase 9 sentiment progress
+    try:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM trailer_comments WHERE text != '__comments_disabled__'"
+        )
+        total_comments = (await cursor.fetchone())[0]
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM trailer_comments WHERE sentiment IS NOT NULL AND text != '__comments_disabled__'"
+        )
+        scored = (await cursor.fetchone())[0]
+        if total_comments > 0:
+            pct = scored / total_comments * 100
+            print(f"  sentiment:      {scored:,}/{total_comments:,} ({pct:.1f}%)")
     except Exception:
         pass
 
@@ -229,6 +292,38 @@ async def cmd_stats():
         for r in rows:
             print(f"    {r['language']:5s} {r['cnt']:>10,}")
 
+    # Comment & sentiment stats
+    print()
+    try:
+        cursor = await db.execute(
+            "SELECT COUNT(*) FROM trailer_comments WHERE text != '__comments_disabled__'"
+        )
+        total_comments = (await cursor.fetchone())[0]
+        print(f"  Total comments:   {total_comments:,}")
+
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT youtube_id) FROM trailer_comments WHERE text != '__comments_disabled__'"
+        )
+        print(f"  Videos w/comments:{(await cursor.fetchone())[0]:>8,}")
+
+        cursor = await db.execute(
+            "SELECT COUNT(DISTINCT youtube_id) FROM trailer_comments WHERE text = '__comments_disabled__'"
+        )
+        print(f"  Comments disabled:{(await cursor.fetchone())[0]:>8,}")
+
+        cursor = await db.execute(
+            """SELECT sentiment, COUNT(*) as cnt FROM trailer_comments
+               WHERE sentiment IS NOT NULL AND text != '__comments_disabled__'
+               GROUP BY sentiment ORDER BY cnt DESC"""
+        )
+        rows = await cursor.fetchall()
+        if rows:
+            print("\n  Sentiment breakdown:")
+            for r in rows:
+                print(f"    {r['sentiment']:12s} {r['cnt']:>10,}")
+    except Exception:
+        print("  Comments:         (table not created yet)")
+
     print()
     await db.close()
 
@@ -244,6 +339,9 @@ COMMANDS = {
     "phase6": cmd_phase6,
     "phase7": cmd_phase7,
     "phase7a": cmd_phase7a,
+    "phase8": cmd_phase8,
+    "phase8a": cmd_phase8a,
+    "phase9": cmd_phase9,
     "analytics": cmd_analytics,
     "group-trailers": cmd_group_trailers,
     "daily-update": cmd_daily_update,
@@ -268,6 +366,9 @@ def main():
         print("  phase6   Collect trailers for TV series from TMDB")
         print("  phase7   Collect subtitle/audio/format metadata (all trailers)")
         print("  phase7a  Collect subtitle/audio/format metadata (top 10K movies)")
+        print("  phase8   Collect YouTube comments (all trailers)")
+        print("  phase8a  Collect YouTube comments (top 10K movies)")
+        print("  phase9   Sentiment analysis on collected comments")
         print("  analytics  Compute analytics (timeline + confidence + channels)")
         print("  group-trailers  Group trailers by language (same trailer, different langs)")
         print("  daily-update  Daily incremental update (new movies, series, trailers)")

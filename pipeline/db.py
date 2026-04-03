@@ -192,6 +192,25 @@ CREATE INDEX IF NOT EXISTS idx_subs_movie ON trailer_subtitles(movie_id);
 CREATE INDEX IF NOT EXISTS idx_audio_youtube ON trailer_audio_tracks(youtube_id);
 CREATE INDEX IF NOT EXISTS idx_audio_lang ON trailer_audio_tracks(language);
 CREATE INDEX IF NOT EXISTS idx_formats_youtube ON trailer_formats(youtube_id);
+
+CREATE TABLE IF NOT EXISTS trailer_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  youtube_id TEXT NOT NULL,
+  comment_id TEXT NOT NULL UNIQUE,
+  author TEXT,
+  author_channel_id TEXT,
+  text TEXT NOT NULL,
+  like_count INTEGER DEFAULT 0,
+  reply_count INTEGER DEFAULT 0,
+  published_at TEXT,
+  is_top_level INTEGER DEFAULT 1,
+  sentiment TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_youtube ON trailer_comments(youtube_id);
+CREATE INDEX IF NOT EXISTS idx_comments_likes ON trailer_comments(like_count DESC);
+CREATE INDEX IF NOT EXISTS idx_comments_sentiment ON trailer_comments(sentiment);
 """
 
 
@@ -200,6 +219,16 @@ MIGRATIONS = [
     "ALTER TABLE trailers ADD COLUMN days_before_release INTEGER",
     "ALTER TABLE trailers ADD COLUMN confidence INTEGER",
     "ALTER TABLE trailers ADD COLUMN trailer_group_id INTEGER",
+    # Expanded YouTube metadata (Phase 3 v2)
+    "ALTER TABLE trailers ADD COLUMN description TEXT",
+    "ALTER TABLE trailers ADD COLUMN tags TEXT",
+    "ALTER TABLE trailers ADD COLUMN category_id INTEGER",
+    "ALTER TABLE trailers ADD COLUMN thumbnail_url TEXT",
+    "ALTER TABLE trailers ADD COLUMN comment_count INTEGER",
+    "ALTER TABLE trailers ADD COLUMN is_embeddable INTEGER",
+    "ALTER TABLE trailers ADD COLUMN is_age_restricted INTEGER",
+    "ALTER TABLE trailers ADD COLUMN default_language TEXT",
+    "ALTER TABLE trailers ADD COLUMN caption_available INTEGER",
 ]
 
 
