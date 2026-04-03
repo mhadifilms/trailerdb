@@ -10,7 +10,7 @@ export function Footer() {
         {stats && (
           <div className="flex flex-wrap justify-center gap-6 md:gap-10 mb-8">
             <StatItem value={stats.movies_with_trailers.toLocaleString()} label="Movies" />
-            <StatItem value={stats.total_trailers.toLocaleString()} label="Trailers" />
+            <StatItem value={(stats.total_trailers + (stats.total_series_trailers || 0)).toLocaleString()} label="Trailers" />
             <StatItem value={`${stats.languages}+`} label="Languages" />
           </div>
         )}
