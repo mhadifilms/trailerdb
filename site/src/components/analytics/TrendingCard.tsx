@@ -47,28 +47,18 @@ export function TrendingCard({ trailer }: TrendingCardProps) {
   }
 
   return (
-    <button
-      onClick={handleClick}
-      className="flex items-start gap-3 p-3 rounded-xl bg-bg-base border border-border hover:border-text-muted/30 transition-all w-full text-left cursor-pointer group"
-    >
-      {/* Poster thumbnail */}
-      <div className="w-10 h-[60px] shrink-0 rounded overflow-hidden bg-bg-surface">
+    <div className="flex items-start gap-3 p-3 rounded-xl bg-bg-base border border-border hover:border-text-muted/30 transition-all group">
+      {/* Poster thumbnail — clicks to deep dive */}
+      <button onClick={handleClick} className="w-10 h-[60px] shrink-0 rounded overflow-hidden bg-bg-surface cursor-pointer">
         {poster ? (
-          <img
-            src={poster}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
+          <img src={poster} alt="" className="w-full h-full object-cover" loading="lazy" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-text-muted text-[10px] font-body">
-            N/A
-          </div>
+          <div className="w-full h-full flex items-center justify-center text-text-muted text-[10px] font-body">N/A</div>
         )}
-      </div>
+      </button>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
+      {/* Content — clicks to deep dive */}
+      <button onClick={handleClick} className="flex-1 min-w-0 text-left cursor-pointer">
         <div className="font-body font-medium text-sm text-text-primary truncate group-hover:text-text-primary/80 transition-colors">
           {trailer.movie}
         </div>
@@ -88,7 +78,21 @@ export function TrendingCard({ trailer }: TrendingCardProps) {
             </span>
           )}
         </div>
-      </div>
-    </button>
+      </button>
+
+      {/* Watch on YouTube icon */}
+      <a
+        href={`https://www.youtube.com/watch?v=${trailer.youtube_id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 mt-2 p-1.5 text-text-muted hover:text-text-primary transition-colors rounded-lg hover:bg-bg-surface"
+        title="Watch on YouTube"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+        </svg>
+      </a>
+    </div>
   )
 }

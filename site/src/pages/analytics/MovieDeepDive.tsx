@@ -222,16 +222,29 @@ function TrailersSubTab({ trailers }: { trailers: Trailer[] }) {
       {
         header: 'Title',
         accessor: (row) => (
-          <button
-            onClick={() =>
-              setExpandedId((prev) =>
-                prev === row.youtube_id ? null : row.youtube_id,
-              )
-            }
-            className="text-left font-medium text-text-primary hover:text-text-primary/70 transition-colors cursor-pointer truncate max-w-[200px] block"
-          >
-            {row.title || 'Untitled'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() =>
+                setExpandedId((prev) =>
+                  prev === row.youtube_id ? null : row.youtube_id,
+                )
+              }
+              className="text-left font-medium text-text-primary hover:text-text-primary/70 transition-colors cursor-pointer truncate max-w-[180px]"
+            >
+              {row.title || 'Untitled'}
+            </button>
+            <a
+              href={`https://www.youtube.com/watch?v=${row.youtube_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-text-muted hover:text-text-primary transition-colors"
+              title="Watch on YouTube"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          </div>
         ),
         sortValue: (row) => row.title || '',
       },

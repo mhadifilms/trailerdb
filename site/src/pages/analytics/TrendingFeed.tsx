@@ -321,18 +321,31 @@ export function TrendingFeed() {
               <h3 className="font-display text-text-primary text-lg mb-3">Most Viewed</h3>
               <div className="rounded-xl bg-bg-surface border border-border p-3">
                 {mostViewed.map((mv, i) => (
-                  <a
-                    key={mv.youtube_id}
-                    href={`/analytics?movie=${mv.imdb_id}`}
-                    className="block hover:bg-bg-hover rounded-lg transition-colors -mx-1 px-1"
-                  >
-                    <LeaderboardEntry
-                      rank={i + 1}
-                      title={`${mv.movie} - ${mv.title}`}
-                      value={mv.views}
-                      maxValue={topViewedMax}
-                    />
-                  </a>
+                  <div key={mv.youtube_id} className="flex items-center gap-1 hover:bg-bg-hover rounded-lg transition-colors -mx-1 px-1">
+                    <a
+                      href={`/analytics?movie=${mv.imdb_id}`}
+                      className="flex-1 min-w-0"
+                    >
+                      <LeaderboardEntry
+                        rank={i + 1}
+                        title={`${mv.movie} - ${mv.title}`}
+                        value={mv.views}
+                        maxValue={topViewedMax}
+                      />
+                    </a>
+                    <a
+                      href={`https://www.youtube.com/watch?v=${mv.youtube_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 p-1 text-text-muted hover:text-text-primary transition-colors"
+                      title="Watch on YouTube"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                      </svg>
+                    </a>
+                  </div>
                 ))}
               </div>
             </div>
