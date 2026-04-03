@@ -129,20 +129,18 @@ function generateInsights(analytics: AnalyticsData) {
     })
   }
 
-  // 2. Top performing type (exclude clips — they include music videos which skew data)
-  const sortedTypes = [...analytics.by_type]
-    .filter((t) => t.type !== 'clip')
-    .sort((a, b) => b.avg_views - a.avg_views)
-  const topType = sortedTypes[0]
+  // 2. Teaser vs Trailer performance comparison
+  const teaserType = analytics.by_type.find((t) => t.type === 'teaser')
   const trailerType = analytics.by_type.find((t) => t.type === 'trailer')
-  if (topType && trailerType) {
-    const config = TRAILER_TYPE_CONFIG[topType.type as TrailerType]
-    const mult = (topType.avg_views / trailerType.avg_views).toFixed(1)
+  if (teaserType && trailerType) {
+    const teaserDur = Math.round(teaserType.avg_duration)
+    const trailerDur = Math.round(trailerType.avg_duration)
+    const viewRatio = (teaserType.avg_views / trailerType.avg_views * 100).toFixed(0)
     insights.push({
-      title: 'Top Performing Type',
-      value: config?.label || topType.type,
-      description: `Averages ${formatNum(topType.avg_views)} views per upload — ${mult}x more than standard trailers.`,
-      accent: config?.color || '#000',
+      title: 'Teasers vs Trailers',
+      value: `${viewRatio}% match`,
+      description: `Teasers (${teaserDur}s avg) get ${formatNum(teaserType.avg_views)} views vs trailers (${trailerDur}s) at ${formatNum(trailerType.avg_views)}.`,
+      accent: 'var(--color-type-teaser)',
     })
   }
 
@@ -292,9 +290,29 @@ export function TrendingFeed() {
                   label="Languages"
                 />
                 <StatCard
-                  value={formatDuration(analytics.overview.avg_duration)}
-                  label="Avg Duration"
+                  value={formatDuration(analytics.by_type.find(t => t.type === 'trailer')?.avg_duration ?? 0)}
+                  label="Avg Trailer"
                 />
+              </div>
+            </div>
+
+            {/* Duration by type */}
+            <div>
+              <h3 className="font-display text-text-primary text-lg mb-3">Avg Duration</h3>
+              <div className="rounded-xl bg-bg-surface border border-border p-3 space-y-2">
+                {analytics.by_type
+                  .filter(t => ['trailer', 'teaser', 'tv_spot', 'red_band', 'clip', 'featurette', 'behind_the_scenes'].includes(t.type))
+                  .sort((a, b) => b.count - a.count)
+                  .slice(0, 5)
+                  .map(t => {
+                    const config = TRAILER_TYPE_CONFIG[t.type as TrailerType]
+                    return (
+                      <div key={t.type} className="flex items-center justify-between">
+                        <span className="text-xs font-body text-text-secondary">{config?.label || t.type}</span>
+                        <span className="text-xs font-body font-semibold text-text-primary tabular-nums">{formatDuration(t.avg_duration)}</span>
+                      </div>
+                    )
+                  })}
               </div>
             </div>
 
