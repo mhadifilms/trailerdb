@@ -1,11 +1,9 @@
 name: Daily Trailer Update
 
-# DISABLED: The SQLite DB is no longer in the repo (too large for LFS).
-# Run daily updates locally: python scripts/daily_update.py
-# Then re-export and push: python scripts/export.py && git add site/public/data/ && git push
-
 on:
-  workflow_dispatch:  # manual trigger only — no auto schedule
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,9 +12,33 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
-      - name: Notice
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run daily update
+        run: python scripts/daily_update_d1.py
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ff3544f44f2313a5f2950c3cf6893546
+          D1_DATABASE_ID: 66f80a02-0079-4601-8886-8d4411227cd0
+
+      - name: Commit and push updated JSON files
         run: |
-          echo "Daily updates must be run locally since the DB is not in the repo."
-          echo "Run: python scripts/daily_update.py && python scripts/export.py"
-          echo "Then commit and push the updated data files."
-          exit 1
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add site/public/data/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Daily update: $(date -u +%Y-%m-%d)"
+            git push
+          fi
