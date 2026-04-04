@@ -12,7 +12,7 @@ from pipeline.db import get_connection
 logger = logging.getLogger(__name__)
 
 # Rate limit: 1 request per 2.5 seconds to avoid YouTube throttling
-REQUEST_INTERVAL = 2.5
+REQUEST_INTERVAL = 0.5
 COMMIT_EVERY = 50
 
 YDL_OPTS = {
