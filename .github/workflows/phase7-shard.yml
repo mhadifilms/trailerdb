@@ -1,0 +1,33 @@
+name: Phase 7 Shard — Rich trailer metadata
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  phase7:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install aiohttp requests
+
+      - name: Run shard ${{ matrix.shard }}/20
+        run: python scripts/phase7_shard.py --shard ${{ matrix.shard }} --total 20
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ff3544f44f2313a5f2950c3cf6893546
+          D1_DATABASE_ID: 66f80a02-0079-4601-8886-8d4411227cd0

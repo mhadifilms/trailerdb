@@ -211,6 +211,42 @@ CREATE TABLE IF NOT EXISTS trailer_comments (
 CREATE INDEX IF NOT EXISTS idx_comments_youtube ON trailer_comments(youtube_id);
 CREATE INDEX IF NOT EXISTS idx_comments_likes ON trailer_comments(like_count DESC);
 CREATE INDEX IF NOT EXISTS idx_comments_sentiment ON trailer_comments(sentiment);
+
+CREATE TABLE IF NOT EXISTS trailer_metadata (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  movie_id INTEGER NOT NULL,
+  youtube_id TEXT NOT NULL UNIQUE,
+  category TEXT,
+  upload_date TEXT,
+  publish_date TEXT,
+  is_family_safe INTEGER,
+  is_unlisted INTEGER,
+  is_private INTEGER,
+  available_country_count INTEGER,
+  has_chapters INTEGER,
+  chapters_json TEXT,
+  length_seconds INTEGER,
+  view_count_snapshot INTEGER,
+  fetch_status TEXT,
+  processed_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_metadata_youtube ON trailer_metadata(youtube_id);
+CREATE INDEX IF NOT EXISTS idx_metadata_movie ON trailer_metadata(movie_id);
+CREATE INDEX IF NOT EXISTS idx_metadata_category ON trailer_metadata(category);
+CREATE INDEX IF NOT EXISTS idx_metadata_family_safe ON trailer_metadata(is_family_safe);
+
+CREATE TABLE IF NOT EXISTS trailer_availability (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  movie_id INTEGER NOT NULL,
+  youtube_id TEXT NOT NULL,
+  country_code TEXT NOT NULL,
+  UNIQUE(youtube_id, country_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_availability_youtube ON trailer_availability(youtube_id);
+CREATE INDEX IF NOT EXISTS idx_availability_country ON trailer_availability(country_code);
+CREATE INDEX IF NOT EXISTS idx_availability_movie ON trailer_availability(movie_id);
 """
 
 
