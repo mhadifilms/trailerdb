@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { SEOHead } from '../components/SEOHead'
 import { ModeBar } from '../components/analytics/ModeBar'
+import { AIAskPanel } from '../components/analytics/AIAskPanel'
 
 // Lazy-loaded mode components
 const TrendingFeed = lazy(() =>
@@ -97,6 +98,8 @@ export function Analytics() {
           </Suspense>
         </div>
       </div>
+
+      <AIAskPanel />
     </>
   )
 }
