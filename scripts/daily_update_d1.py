@@ -119,17 +119,17 @@ def d1_exec(sql: str) -> bool:
 
 
 def d1_batch(statements: list[str]) -> bool:
-    """Execute multiple SQL statements in a single D1 batch request."""
+    """Execute multiple SQL statements in one D1 call (joined with semicolons)."""
     if not statements:
         return True
-    # D1 batch endpoint accepts an array of {sql} objects
+    combined = ";\n".join(s.rstrip(";") for s in statements) + ";"
     resp = requests.post(
         f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/raw",
         headers={
             "Authorization": f"Bearer {CF_API_TOKEN}",
             "Content-Type": "application/json",
         },
-        json=[{"sql": s} for s in statements],
+        json={"sql": combined},
         timeout=120,
     )
     data = resp.json()

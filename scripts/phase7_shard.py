@@ -38,16 +38,15 @@ D1_DATABASE_ID = os.environ.get("D1_DATABASE_ID", "")
 # Scrape config
 WATCH_URL = "https://www.youtube.com/watch?v={video_id}&bpctr=9999999999&has_verified=1"
 WARMUP_URL = "https://www.youtube.com/"
-CONCURRENCY = 8
-JITTER_MIN = 0.05
-JITTER_MAX = 0.25
-MAX_RETRIES = 4
+CONCURRENCY = 3
+JITTER_MIN = 0.2
+JITTER_MAX = 0.6
+MAX_RETRIES = 2
 BACKOFF_BASE = 2.5
 REQUEST_TIMEOUT = 25
 
-# D1 batch flush
-FLUSH_EVERY = 40  # videos per flush
-D1_STMTS_PER_BATCH = 25  # statements per D1 API call (stay under 100KB)
+# Per-video D1 write: each video produces ~10 statements, sent as one batch
+D1_STMTS_PER_BATCH = 50  # cap statements per D1 call (under 100KB)
 
 # Circuit breaker
 CB_WINDOW = 120
@@ -100,25 +99,26 @@ def d1_query(sql: str) -> list[dict]:
 
 
 def d1_batch(statements: list[str]) -> None:
+    """Execute multiple statements in one D1 call by joining with semicolons."""
     if not statements:
         return
-    resp = requests.post(
-        f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/raw",
-        headers={"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"},
-        json=[{"sql": s} for s in statements], timeout=120,
-    )
-    data = resp.json()
-    if not data.get("success"):
-        # Try one retry
-        time.sleep(2)
-        resp = requests.post(
-            f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/raw",
-            headers={"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"},
-            json=[{"sql": s} for s in statements], timeout=120,
-        )
-        data = resp.json()
-        if not data.get("success"):
-            raise RuntimeError(f"D1 batch error: {data.get('errors')}")
+    # D1 /raw accepts a single multi-statement SQL string. Join with ;.
+    combined = ";\n".join(s.rstrip(";") for s in statements) + ";"
+    url = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}/raw"
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}", "Content-Type": "application/json"}
+    for attempt in range(2):
+        try:
+            resp = requests.post(url, headers=headers, json={"sql": combined}, timeout=120)
+            data = resp.json()
+            if data.get("success"):
+                return
+            errs = data.get("errors")
+        except Exception as e:
+            errs = [{"message": str(e)}]
+        if attempt == 0:
+            time.sleep(2)
+            continue
+        raise RuntimeError(f"D1 batch error: {errs}")
 
 
 def sql_escape(value) -> str:
@@ -411,7 +411,21 @@ class CircuitBreaker:
                     await asyncio.sleep(self.pause_s)
 
 
-async def _worker(name, session, queue, buffer, buffer_lock, stats, breaker):
+async def _flush_video(loop, stmts, stats):
+    """Push one video's statements to D1 as a single batched call."""
+    if not stmts:
+        return
+    for i in range(0, len(stmts), D1_STMTS_PER_BATCH):
+        chunk = stmts[i:i + D1_STMTS_PER_BATCH]
+        try:
+            await loop.run_in_executor(None, d1_batch, chunk)
+            stats["flushed"] += len(chunk)
+        except Exception as e:
+            logger.error(f"D1 write failed ({len(chunk)} stmts): {e}")
+            stats["flush_errors"] += 1
+
+
+async def _worker(name, session, queue, stats, breaker, loop):
     while True:
         item = await queue.get()
         if item is None:
@@ -422,62 +436,34 @@ async def _worker(name, session, queue, buffer, buffer_lock, stats, breaker):
         try:
             data, reason = await _fetch_player(session, youtube_id)
             stmts = build_statements(movie_id, youtube_id, data, reason)
-            async with buffer_lock:
-                buffer.extend(stmts)
-                stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
-                if data is None:
-                    stats["errors"] += 1
-                    breaker.record(True)
-                else:
-                    ns = len(_parse_subtitles(data))
-                    na = len(_parse_audio_tracks(data))
-                    mf = _parse_microformat(data)
-                    if ns:
-                        stats["subtitled"] += 1
-                    if na > 1:
-                        stats["multi_audio"] += 1
-                    if mf["available_country_count"]:
-                        stats["with_geo"] += 1
-                    breaker.record(False)
-                stats["processed"] += 1
+            await _flush_video(loop, stmts, stats)
+            stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
+            if data is None:
+                stats["errors"] += 1
+                breaker.record(True)
+            else:
+                if _parse_subtitles(data):
+                    stats["subtitled"] += 1
+                if len(_parse_audio_tracks(data)) > 1:
+                    stats["multi_audio"] += 1
+                if _parse_microformat(data)["available_country_count"]:
+                    stats["with_geo"] += 1
+                breaker.record(False)
+            stats["processed"] += 1
         except Exception as e:
             logger.debug(f"worker {name} error on {youtube_id}: {e}")
-            async with buffer_lock:
-                buffer.extend(build_statements(movie_id, youtube_id, None, f"exc:{type(e).__name__}"))
-                stats["errors"] += 1
-                stats["reasons"]["worker_exc"] = stats["reasons"].get("worker_exc", 0) + 1
-                stats["processed"] += 1
-                breaker.record(True)
+            try:
+                stmts = build_statements(movie_id, youtube_id, None, f"exc:{type(e).__name__}")
+                await _flush_video(loop, stmts, stats)
+            except Exception:
+                pass
+            stats["errors"] += 1
+            stats["reasons"]["worker_exc"] = stats["reasons"].get("worker_exc", 0) + 1
+            stats["processed"] += 1
+            breaker.record(True)
         finally:
             queue.task_done()
             await asyncio.sleep(random.uniform(JITTER_MIN, JITTER_MAX))
-
-
-async def _flusher(buffer, buffer_lock, stats, stop_event, loop):
-    """Periodically flush buffered statements to D1 in batches."""
-    while not stop_event.is_set() or buffer:
-        await asyncio.sleep(2.0)
-        async with buffer_lock:
-            if len(buffer) < FLUSH_EVERY and not stop_event.is_set():
-                continue
-            pending = list(buffer)
-            buffer.clear()
-        # Flush in chunks via D1 batch endpoint (sync, run in thread)
-        for i in range(0, len(pending), D1_STMTS_PER_BATCH):
-            chunk = pending[i:i + D1_STMTS_PER_BATCH]
-            try:
-                await loop.run_in_executor(None, d1_batch, chunk)
-                stats["flushed"] += len(chunk)
-            except Exception as e:
-                logger.error(f"D1 flush failed: {e}")
-                stats["flush_errors"] += 1
-                # Retry once after brief delay
-                await asyncio.sleep(3.0)
-                try:
-                    await loop.run_in_executor(None, d1_batch, chunk)
-                    stats["flushed"] += len(chunk)
-                except Exception as e2:
-                    logger.error(f"D1 flush retry failed ({len(chunk)} stmts dropped): {e2}")
 
 
 async def _progress_reporter(stats, total, start, stop_event):
@@ -539,8 +525,6 @@ async def run_shard(shard_id: int, total_shards: int):
     }
     start = time.monotonic()
     queue = asyncio.Queue(maxsize=CONCURRENCY * 4)
-    buffer: list[str] = []
-    buffer_lock = asyncio.Lock()
     stop_event = asyncio.Event()
     breaker = CircuitBreaker(CB_WINDOW, CB_ERR_RATE, CB_PAUSE_SECONDS)
     loop = asyncio.get_event_loop()
@@ -552,11 +536,25 @@ async def run_shard(shard_id: int, total_shards: int):
         await _warm_session(session)
         logger.info("Session warmed")
 
+        # Smoke-test: fetch a known-good video and try a D1 insert before launching workers.
+        # Surfaces config issues (auth, schema, network) in the first 5 seconds instead of 6 hours.
+        smoke_data, smoke_reason = await _fetch_player(session, "EXeTwQWrcwY")
+        logger.info(f"Smoke fetch: reason={smoke_reason} got_data={smoke_data is not None}")
+        if smoke_data:
+            try:
+                await loop.run_in_executor(
+                    None, d1_batch,
+                    ["INSERT OR IGNORE INTO genres (id, name) VALUES (-1, '__smoke__')"],
+                )
+                logger.info("Smoke D1 write: OK")
+            except Exception as e:
+                logger.error(f"Smoke D1 write FAILED: {e}")
+                return
+
         workers = [
-            asyncio.create_task(_worker(i, session, queue, buffer, buffer_lock, stats, breaker))
+            asyncio.create_task(_worker(i, session, queue, stats, breaker, loop))
             for i in range(CONCURRENCY)
         ]
-        flusher = asyncio.create_task(_flusher(buffer, buffer_lock, stats, stop_event, loop))
         reporter = asyncio.create_task(_progress_reporter(stats, total, start, stop_event))
 
         for mid, yid in my_rows:
@@ -566,17 +564,7 @@ async def run_shard(shard_id: int, total_shards: int):
 
         await asyncio.gather(*workers)
         stop_event.set()
-        await flusher
         await reporter
-
-    # Final flush safety net
-    if buffer:
-        logger.info(f"Final flush: {len(buffer)} residual statements")
-        for i in range(0, len(buffer), D1_STMTS_PER_BATCH):
-            try:
-                d1_batch(buffer[i:i + D1_STMTS_PER_BATCH])
-            except Exception as e:
-                logger.error(f"Final flush failed: {e}")
 
     elapsed = time.monotonic() - start
     h, r = divmod(int(elapsed), 3600)
