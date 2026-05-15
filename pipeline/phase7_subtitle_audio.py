@@ -158,22 +158,36 @@ async def _fetch_player(session: aiohttp.ClientSession, youtube_id: str) -> tupl
 
 
 def _parse_subtitles(data: dict) -> list[dict]:
+    """Keep manual tracks + at most one ASR (the original-language auto-caption).
+
+    YouTube sometimes lists 100+ auto-translated languages as real captionTracks
+    entries; we drop those because they're not real captions, just translation
+    targets. Manual (kind != "asr") tracks are kept regardless.
+    """
     pct = (data.get("captions") or {}).get("playerCaptionsTracklistRenderer") or {}
     tracks = pct.get("captionTracks") or []
     results = []
-    seen = set()
+    seen_manual = set()
+    asr_kept = False
     for t in tracks:
         lang = t.get("languageCode")
         if not lang:
             continue
-        is_auto = 1 if t.get("kind") == "asr" else 0
-        key = (lang, is_auto)
-        if key in seen:
-            continue
-        seen.add(key)
-        results.append(
-            {"language": lang, "is_auto_generated": is_auto, "formats": "vtt,srt,ttml"}
-        )
+        is_auto = t.get("kind") == "asr"
+        if is_auto:
+            if asr_kept:
+                continue
+            asr_kept = True
+            results.append(
+                {"language": lang, "is_auto_generated": 1, "formats": "vtt,srt,ttml"}
+            )
+        else:
+            if lang in seen_manual:
+                continue
+            seen_manual.add(lang)
+            results.append(
+                {"language": lang, "is_auto_generated": 0, "formats": "vtt,srt,ttml"}
+            )
     return results
 
 
