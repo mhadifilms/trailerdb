@@ -45,44 +45,57 @@ jobs:
       - name: Run single-movie pipeline
         id: pipeline
         env:
+          IMDB_ID: ${{ steps.extract.outputs.imdb_id }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
-          python -m pipeline.add_single_movie ${{ steps.extract.outputs.imdb_id }} 2>&1 | tee pipeline_output.txt
+          python -m pipeline.add_single_movie "$IMDB_ID" 2>&1 | tee pipeline_output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       - name: Check for results
         id: results
+        env:
+          IMDB_ID: ${{ steps.extract.outputs.imdb_id }}
         run: |
-          IMDB_ID="${{ steps.extract.outputs.imdb_id }}"
           JSON_FILE="site/public/data/movie/${IMDB_ID}.json"
           if [ -f "$JSON_FILE" ]; then
             TRAILER_COUNT=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(len(d.get('trailers', [])))")
             TITLE=$(python3 -c "import json; d=json.load(open('$JSON_FILE')); print(d.get('title', 'Unknown'))")
             echo "found=true" >> "$GITHUB_OUTPUT"
             echo "trailer_count=$TRAILER_COUNT" >> "$GITHUB_OUTPUT"
-            echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+            DELIMITER="$(uuidgen)"
+            {
+              echo "title<<$DELIMITER"
+              echo "$TITLE"
+              echo "$DELIMITER"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit new movie data
         if: steps.results.outputs.found == 'true'
+        env:
+          IMDB_ID: ${{ steps.extract.outputs.imdb_id }}
+          TITLE: ${{ steps.results.outputs.title }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          IMDB_ID="${{ steps.extract.outputs.imdb_id }}"
           git add "site/public/data/movie/${IMDB_ID}.json"
-          git commit -m "Add movie data for ${{ steps.results.outputs.title }} (${IMDB_ID})" || echo "Nothing to commit"
+          git commit -m "Add movie data for ${TITLE} (${IMDB_ID})" || echo "Nothing to commit"
           git push
 
       - name: Comment with results
         if: steps.results.outputs.found == 'true'
         uses: actions/github-script@v7
+        env:
+          IMDB_ID: ${{ steps.extract.outputs.imdb_id }}
+          TITLE: ${{ steps.results.outputs.title }}
+          TRAILER_COUNT: ${{ steps.results.outputs.trailer_count }}
         with:
           script: |
-            const title = '${{ steps.results.outputs.title }}';
-            const count = '${{ steps.results.outputs.trailer_count }}';
-            const imdbId = '${{ steps.extract.outputs.imdb_id }}';
+            const title = process.env.TITLE || 'Unknown';
+            const count = process.env.TRAILER_COUNT || '0';
+            const imdbId = process.env.IMDB_ID;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -110,9 +123,11 @@ jobs:
       - name: Comment if no trailers found
         if: steps.results.outputs.found == 'false'
         uses: actions/github-script@v7
+        env:
+          IMDB_ID: ${{ steps.extract.outputs.imdb_id }}
         with:
           script: |
-            const imdbId = '${{ steps.extract.outputs.imdb_id }}';
+            const imdbId = process.env.IMDB_ID;
             const output = require('fs').readFileSync('pipeline_output.txt', 'utf8');
 
             await github.rest.issues.createComment({
